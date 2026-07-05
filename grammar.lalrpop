@@ -1,0 +1,120 @@
+use std::str::FromStr;
+use std::vec;
+use crate::parse::{Comparison, ComparisonOp, Elif, Expr, Statement, bx};
+use crate::type_check::ExprType;
+
+grammar;
+
+pub Program = <Stmt*>;
+
+Stmt: Statement = {
+    <a:Atom> ";" => Statement::Expr(a),
+    "let" <v:Var> "=" <a:Atom> ";" => Statement::Def(v, a),
+    "fn" <n:Var> <ps:VarList> "{" <b:FnBody> "}" => Statement::Fn { name: n, params: ps, body: b },
+}
+StmtInFn: Statement = "let" <v:Var> "=" <a:Atom> ";" => Statement::Def(v, a);
+
+FnBody: Vec<Statement> = {
+    <a:Atom> ";" => vec![Statement::Expr(a)],
+    <mut l:FnBodyIn> <a:Atom> ";" => {l.push(Statement::Expr(a)); l}
+}
+
+FnBodyIn: Vec<Statement> = {
+    <mut l:FnBodyIn> <s:StmtInFn> => {l.push(s); l},
+    <s:StmtInFn> => { vec![s] }
+}
+
+Atom: Expr = {
+    #[precedence(level="1")]
+    <A>,
+    #[precedence(level="2")] #[assoc(side="right")]
+    <a:Atom> "^" <b:Atom> => Expr::Exp(bx(a), bx(b)),
+    #[precedence(level="4")] #[assoc(side="left")]
+    <a:Atom> "*" <b:Atom> => Expr::Mul(bx(a), bx(b)),
+    #[precedence(level="4")] #[assoc(side="left")]
+    <a:Atom> "/" <b:Atom> => Expr::Div(bx(a), bx(b)),
+    #[precedence(level="5")] #[assoc(side="right")]
+    "-" <a:Atom> => Expr::Neg(bx(a)),
+    #[precedence(level="5")] #[assoc(side="right")]
+    "+" <Atom>,
+    #[precedence(level="6")] #[assoc(side="left")]
+    <a:Atom> "+" <b:Atom> => Expr::Add(bx(a), bx(b)),
+    #[precedence(level="6")] #[assoc(side="left")]
+    <a:Atom> "-" <b:Atom> => Expr::Sub(bx(a), bx(b)),
+    #[precedence(level="7")]
+    <If>,
+    #[precedence(level="7")]
+    <For>
+}
+
+For: Expr = {
+    "foreach" <ident:Var> "in" <over:Boxed<Atom>> "{" <body:FnBody> "}" => Expr::For { over, ident, body } };
+
+If: Expr = {
+    "if" <cmp:FullComp> "{" <body:Boxed<Atom>> "}" <elifs:Elif*> <elsee:Else?>  =>
+         Expr::If {cmp, body, elifs, elsee}
+}
+
+Else: Box<Expr> = "else" "{" <Boxed<Atom>> "}";
+Elif: Elif = "elif" <cmp:FullComp> "{" <body:Boxed<Atom>> "}" => Elif {cmp, body};
+
+FullComp: Comparison = <c:Boxed<Atom>> <c0:Comp> <c1:Boxed<Atom>> <c2:(Comp Boxed<Atom>)?> => Comparison(c,c0,c1,c2);
+
+Comp: ComparisonOp = <s:r#"(==|>|<|>=|<=|!=)"#> => ComparisonOp::from_str(s).unwrap();
+
+A: Expr = {
+    Num,
+    <v:Var> => Expr::Var(v),
+    "(" <Atom> ")",
+    List,
+    Point,
+    Call,
+}
+
+Call: Expr = {
+    <n:Var> "(" ")" => Expr::Call(n, vec![]),
+    <n:Var> "(" <l:ListIn> ")" => Expr::Call(n, l),
+}
+
+Point: Expr = {
+    "(" <a:Boxed<Atom>> "," <b:Boxed<Atom>> ")" => Expr::Point(a, b),
+    "(" <a:Boxed<Atom>> "," <b:Boxed<Atom>> "," <c:Boxed<Atom>> ")" => Expr::Point3(a, b, c),
+}
+
+List: Expr = {
+    "[" <l:ListIn> "]" => Expr::List(l),
+    "[" "]" => Expr::List(vec![]),
+};
+
+ListIn: Vec<Expr> = {
+    <mut l:ListIn> "," <a:Atom> => {l.push(a); l},
+    <a:Atom> => vec![a],
+};
+
+VarList: Vec<(String, crate::type_check::ExprType)> = {
+    "(" <VarListIn> ")",
+    "(" ")" => vec![],
+}
+
+VarListIn: Vec<(String, ExprType)> = {
+    <mut l:VarListIn> "," <v:Var> ":" <t:Ty> => {l.push((v, t)); l},
+    <v:Var> ":" <t:Ty> => vec![(v,t)]
+}
+
+Ty: ExprType = {
+    "Num" => ExprType::Num,
+    "Action" => ExprType::Action,
+    "Point" => ExprType::Point,
+    "Point3" => ExprType::Point3,
+    "L<Num>" => ExprType::NumList,
+    "L<Point>" => ExprType::PointList,
+    "L<Point3>" => ExprType::Point3List,
+};
+
+Var: String = <s:r#"[_a-zA-Z][_a-zA-Z0-9]*"#> => s.to_owned();
+
+Num: Expr = <s:r#"((\d+\.?\d*)|(\.\d+))"#> => Expr::Num(f32::from_str(s).unwrap());
+
+Boxed<T>: Box<T> = {
+    <mut x:(<T>)> => bx(x)
+};
