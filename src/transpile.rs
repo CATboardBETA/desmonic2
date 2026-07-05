@@ -242,6 +242,7 @@ fn tr(
             let Statement::Expr(last) = last else {
                 unreachable!()
             };
+            let old_fn_name = fn_name;
             let fn_name = if let Some(fn_name) = fn_name {
                 (&format!("{}for{}", fn_name.0, FOR_ID.load(Ordering::Relaxed)), fn_name.1)
             } else {
@@ -250,9 +251,9 @@ fn tr(
             exprs.append(&mut transpile_many(rest.to_vec(), Some(fn_name), ids.0, ids.1));
             format!(
                 "{}\\operatorname{{for}}{}={}",
-                tr(last, Some(fn_name), exprs, ids),
+                tr(last, old_fn_name, exprs, ids),
                 ident_ify(ident),
-                tr(over, Some(fn_name), exprs, ids)
+                tr(over, old_fn_name, exprs, ids)
             )
         }
     }
