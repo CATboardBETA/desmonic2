@@ -16,7 +16,7 @@ pub struct DesmoExpr {
 
 pub fn transpile_many(
     stmts: Vec<Statement>,
-    fn_name: Option<(&String, &Vec<(String, ExprType)>)>,
+    fn_name: Option<(&String, &Vec<(String, ExprType)>, &Vec<String>)>,
     init_id: i32,
     fold_id: Option<i32>,
 ) -> Vec<DesmoExpr> {
@@ -25,7 +25,7 @@ pub fn transpile_many(
     for stmt in stmts {
         match stmt {
             Statement::Expr(e) => {
-                let e = tr(&e, fn_name, &mut exprs, (id, fold_id));
+                let e = tr(&e, fn_name, &mut exprs, &mut (id, fold_id));
                 exprs.push(DesmoExpr {
                     id,
                     folder_id: fold_id,
@@ -37,7 +37,9 @@ pub fn transpile_many(
             Statement::Def(n, e) => {
                 let n = {
                     let replaced = n.replace('_', "");
-                    let replaced = if let Some((fn_name, _params)) = fn_name {
+                    let replaced = if let Some((fn_name, _params, rename_only)) = fn_name
+                        && (rename_only.contains(&n) || rename_only.is_empty())
+                    {
                         format!("{fn_name}{replaced}")
                     } else {
                         replaced
@@ -50,7 +52,7 @@ pub fn transpile_many(
                     };
                     format!("{first}{rest}")
                 };
-                let val = format!("{}={}", n, tr(&e, fn_name, &mut exprs, (id, fold_id)));
+                let val = format!("{}={}", n, tr(&e, fn_name, &mut exprs, &mut (id, fold_id)));
                 exprs.push(DesmoExpr {
                     id,
                     folder_id: fold_id,
@@ -77,7 +79,7 @@ pub fn transpile_many(
                 id += 1;
                 exprs.append(&mut transpile_many(
                     body.into(),
-                    Some((name, params)),
+                    Some((name, params, &vec![])),
                     id,
                     Some(f_id),
                 ));
@@ -109,7 +111,12 @@ pub fn transpile_many(
                     };
                     format!("{first}{rest}")
                 };
-                let val = tr(e, Some((name, params)), &mut exprs, (id, fold_id));
+                let val = tr(
+                    e,
+                    Some((name, params, &vec![])),
+                    &mut exprs,
+                    &mut (id, fold_id),
+                );
                 exprs.push(DesmoExpr {
                     id,
                     folder_id: Some(f_id),
@@ -124,15 +131,23 @@ pub fn transpile_many(
 
 fn tr(
     e: &Expr,
-    fn_name: Option<(&String, &Vec<(String, ExprType)>)>,
+    fn_name: Option<(&String, &Vec<(String, ExprType)>, &Vec<String>)>,
     exprs: &mut Vec<DesmoExpr>,
-    ids: (i32, Option<i32>)
+    ids: &mut (i32, Option<i32>),
 ) -> String {
     match e {
         Expr::Num(n) => n.to_string(),
         Expr::Neg(x) => format!("-{}", tr(x, fn_name, exprs, ids)),
-        Expr::Add(a, b) => format!("{}+{}", tr(a, fn_name, exprs, ids), tr(b, fn_name, exprs, ids)),
-        Expr::Sub(a, b) => format!("{}-{}", tr(a, fn_name, exprs, ids), tr(b, fn_name, exprs, ids)),
+        Expr::Add(a, b) => format!(
+            "{}+{}",
+            tr(a, fn_name, exprs, ids),
+            tr(b, fn_name, exprs, ids)
+        ),
+        Expr::Sub(a, b) => format!(
+            "{}-{}",
+            tr(a, fn_name, exprs, ids),
+            tr(b, fn_name, exprs, ids)
+        ),
         Expr::Mul(a, b) => format!(
             "\\left({}\\right)\\left({}\\right)",
             tr(a, fn_name, exprs, ids),
@@ -150,8 +165,9 @@ fn tr(
         ),
         Expr::Var(s) => {
             let replaced = s.replace('_', "");
-            let replaced = if let Some((fn_name, params)) = fn_name
+            let replaced = if let Some((fn_name, params, rename_only)) = fn_name
                 && params.iter().all(|x| x.0 != *s)
+                && (rename_only.contains(s) || rename_only.is_empty())
             {
                 format!("{fn_name}{replaced}")
             } else {
@@ -172,7 +188,10 @@ fn tr(
             elifs,
             elsee,
         } => {
-            let cmp_match = |Comparison(lhs, c1, mhs, rhs): &Comparison, exprs: &mut Vec<DesmoExpr>| -> String {
+            let cmp_match = |Comparison(lhs, c1, mhs, rhs): &Comparison,
+                             exprs: &mut Vec<DesmoExpr>,
+                             ids: &mut (i32, Option<i32>)|
+             -> String {
                 let rhs = if let Some((c2, rhs)) = rhs {
                     format!("{}{}", c2, tr(rhs, fn_name, exprs, ids))
                 } else {
@@ -188,15 +207,21 @@ fn tr(
             };
             let elifs = elifs
                 .iter()
-                .map(|el| format!(",{}:{}", cmp_match(&el.cmp, exprs), tr(&el.body, fn_name, exprs, ids)))
+                .map(|el| {
+                    format!(
+                        ",{}:{}",
+                        cmp_match(&el.cmp, exprs, ids),
+                        tr(&el.body, fn_name, exprs, ids)
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("");
-            let elsee = elsee
-                .as_ref()
-                .map_or_else(String::new, |body| format!(",{}", tr(body, fn_name, exprs, ids)));
+            let elsee = elsee.as_ref().map_or_else(String::new, |body| {
+                format!(",{}", tr(body, fn_name, exprs, ids))
+            });
             format!(
                 "\\left\\{{{}:{}{}{}\\right\\}}",
-                cmp_match(cmp, exprs),
+                cmp_match(cmp, exprs, ids),
                 tr(body, fn_name, exprs, ids),
                 elifs,
                 elsee
@@ -242,18 +267,58 @@ fn tr(
             let Statement::Expr(last) = last else {
                 unreachable!()
             };
-            let old_fn_name = fn_name;
-            let fn_name = if let Some(fn_name) = fn_name {
-                (&format!("{}for{}", fn_name.0, FOR_ID.load(Ordering::Relaxed)), fn_name.1)
+            // incredible var names, I know
+            let fn_name_pt3 = rest
+                .iter()
+                .map(|def| {
+                    let Statement::Def(n, _e) = def else {
+                        unreachable!()
+                    };
+                    n.clone()
+                })
+                .collect::<Vec<String>>();
+            let fn_name2 = if let Some(fn_name) = fn_name {
+                (
+                    &format!("{}for{}", fn_name.0, FOR_ID.load(Ordering::Relaxed)),
+                    fn_name.1,
+                    &fn_name_pt3,
+                )
             } else {
-                (&format!("for{}", FOR_ID.load(Ordering::Relaxed)), &vec![])
+                (
+                    &format!("for{}", FOR_ID.load(Ordering::Relaxed)),
+                    &vec![],
+                    &fn_name_pt3,
+                )
             };
-            exprs.append(&mut transpile_many(rest.to_vec(), Some(fn_name), ids.0, ids.1));
+            let mut additional = rest
+                .iter()
+                .map(|def| {
+                    let Statement::Def(n, e) = def else {
+                        unreachable!()
+                    };
+                    let n = ident_ify(&format!(
+                        "{}for{}{}",
+                        fn_name.map(|x| x.0).unwrap_or(&"".to_string()),
+                        FOR_ID.load(Ordering::Relaxed),
+                        n
+                    ));
+                    let content = format!("{}={}", n, tr(e, Some(fn_name2), exprs, ids));
+                    ids.0 += 1;
+                    DesmoExpr {
+                        id: ids.0,
+                        folder_id: ids.1,
+                        content,
+                        other: hm(),
+                    }
+                })
+                .collect::<Vec<_>>();
+            exprs.append(&mut additional);
+            FOR_ID.fetch_add(1, Ordering::Relaxed);
             format!(
-                "{}\\operatorname{{for}}{}={}",
-                tr(last, old_fn_name, exprs, ids),
+                "\\left({}\\operatorname{{for}}{}={}\\right)",
+                tr(last, Some(fn_name2), exprs, ids),
                 ident_ify(ident),
-                tr(over, old_fn_name, exprs, ids)
+                tr(over, fn_name, exprs, ids)
             )
         }
     }
