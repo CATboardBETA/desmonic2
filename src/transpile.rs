@@ -2,6 +2,9 @@ use crate::parse::{Comparison, Expr, Statement};
 use crate::type_check::ExprType;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicI32, Ordering};
+
+static FOR_ID: AtomicI32 = AtomicI32::new(0);
 
 #[derive(Debug)]
 pub struct DesmoExpr {
@@ -239,12 +242,17 @@ fn tr(
             let Statement::Expr(last) = last else {
                 unreachable!()
             };
-            exprs.append(&mut transpile_many(rest.to_vec(), fn_name, ids.0, ids.1));
+            let fn_name = if let Some(fn_name) = fn_name {
+                (&format!("{}for{}", fn_name.0, FOR_ID.load(Ordering::Relaxed)), fn_name.1)
+            } else {
+                (&format!("for{}", FOR_ID.load(Ordering::Relaxed)), &vec![])
+            };
+            exprs.append(&mut transpile_many(rest.to_vec(), Some(fn_name), ids.0, ids.1));
             format!(
                 "{}\\operatorname{{for}}{}={}",
-                tr(last, fn_name, exprs, ids),
+                tr(last, Some(fn_name), exprs, ids),
                 ident_ify(ident),
-                tr(over, fn_name, exprs, ids)
+                tr(over, Some(fn_name), exprs, ids)
             )
         }
     }
