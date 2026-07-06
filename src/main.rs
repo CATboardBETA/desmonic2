@@ -65,33 +65,7 @@ fn main() {
         let mut funcs = HashMap::<String, ExprType>::new();
         let mut errs = vec![];
         for stmt in ast.clone() {
-            match stmt {
-                Statement::Expr(e) => {
-                    type_check::check(e, &mut vars, &mut funcs, &mut errs);
-                }
-                Statement::Def(n, e) => {
-                    let typed = type_check::check(e, &mut vars, &mut funcs, &mut errs);
-                    vars.insert(n, typed);
-                }
-                Statement::Fn { name, body, params } => {
-                    let (rest, last) = body.split_at(body.len() - 1);
-                    let mut locals = vars.clone();
-                    locals.extend(params);
-                    for x in rest {
-                        let Statement::Def(n, e) = x else {
-                            unreachable!()
-                        };
-                        let typed =
-                            type_check::check(e.clone(), &mut locals, &mut funcs, &mut errs);
-                        locals.insert(n.clone(), typed);
-                    }
-                    let Statement::Expr(last) = last[0].clone() else {
-                        unreachable!()
-                    };
-                    let typed = type_check::check(last, &mut locals, &mut funcs, &mut errs);
-                    funcs.insert(name, typed);
-                }
-            }
+            type_check(stmt, &mut vars, &mut funcs, &mut errs);
         }
         let transpiled = transpile_many(ast, None, 0, None);
 
@@ -106,5 +80,40 @@ fn main() {
             "\nState:\n{}",
             serde_json::to_string(&GraphState::from_vec(transpiled)).unwrap()
         )
+    }
+}
+
+fn type_check(stmt: Statement, vars: &mut HashMap<String, ExprType>, funcs: &mut HashMap<String, ExprType>, errs: &mut Vec<String>) {
+    match stmt {
+        Statement::Expr(e) => {
+            type_check::check(e, vars, funcs, errs);
+        }
+        Statement::Def(n, e) => {
+            let typed = type_check::check(e, vars, funcs, errs);
+            vars.insert(n, typed);
+        }
+        Statement::Fn { name, body, params } => {
+            let (rest, last) = body.split_at(body.len() - 1);
+            let mut locals = vars.clone();
+            locals.extend(params);
+            for x in rest {
+                let Statement::Def(n, e) = x else {
+                    unreachable!()
+                };
+                let typed =
+                    type_check::check(e.clone(), &mut locals,  funcs,  errs);
+                locals.insert(n.clone(), typed);
+            }
+            let Statement::Expr(last) = last[0].clone() else {
+                unreachable!()
+            };
+            let typed = type_check::check(last, &mut locals,  funcs,  errs);
+            funcs.insert(name, typed);
+        }
+        Statement::Styled { stmts, .. } => {
+            for stmt in stmts {
+                type_check(stmt, vars, funcs, errs);
+            }
+        }
     }
 }

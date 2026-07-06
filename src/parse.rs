@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::collections::HashMap;
 use crate::type_check::ExprType;
 use lalrpop_util::lalrpop_mod;
 use std::fmt::{Display, Formatter};
@@ -114,6 +115,10 @@ pub enum Statement {
         params: Vec<(String, ExprType)>,
         body: Vec<Statement>,
     },
+    Styled {
+        stmts: Vec<Statement>,
+        style: HashMap<String, String>
+    }
 }
 
 fn bx<T>(x: T) -> Box<T> {

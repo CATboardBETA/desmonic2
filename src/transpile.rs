@@ -70,19 +70,27 @@ pub fn transpile_many(
                     unreachable!()
                 };
                 let f_id = id;
+                let mut other = hm();
+                other.insert("collapsed".to_string(), Value::Bool(true));
                 exprs.push(DesmoExpr {
                     id: f_id,
                     folder_id: None,
                     content: format!("\\folder Function `{name}`"),
-                    other: hm(),
+                    other,
                 });
                 id += 1;
+                let mut other = hm();
+                other.insert("hidden".to_string(), Value::Bool(true));
+
                 exprs.append(&mut transpile_many(
                     body.into(),
                     Some((name, params, &vec![])),
                     id,
                     Some(f_id),
-                ));
+                ).into_iter().map(|mut e| {
+                    e.other = other.clone();
+                    e
+                }).collect());
                 id += 1;
                 let Statement::Expr(e) = last else {
                     unreachable!()
@@ -123,6 +131,13 @@ pub fn transpile_many(
                     content: format!("{}\\left({}\\right)={}", name_fmt, params_fmt, val),
                     other: hm(),
                 })
+            }
+            Statement::Styled { stmts, style } => {
+                let new = transpile_many(stmts, fn_name, id, fold_id);
+                exprs.extend(new.into_iter().map(|mut x| {
+                    x.other.extend(style.iter().map(|(k,v)| (k.clone(), Value::String(v.clone()))));
+                    x
+                }))
             }
         }
     }
@@ -304,11 +319,13 @@ fn tr(
                     ));
                     let content = format!("{}={}", n, tr(e, Some(fn_name2), exprs, ids));
                     ids.0 += 1;
+                    let mut other = hm();
+                    other.insert("hidden".to_string(), Value::Bool(true));
                     DesmoExpr {
                         id: ids.0,
                         folder_id: ids.1,
                         content,
-                        other: hm(),
+                        other,
                     }
                 })
                 .collect::<Vec<_>>();

@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::collections::HashMap;
 use std::vec;
 use crate::parse::{Comparison, ComparisonOp, Elif, Expr, Statement, bx};
 use crate::type_check::ExprType;
@@ -11,7 +12,23 @@ Stmt: Statement = {
     <a:Atom> ";" => Statement::Expr(a),
     "let" <v:Var> "=" <a:Atom> ";" => Statement::Def(v, a),
     "fn" <n:Var> <ps:VarList> "{" <b:FnBody> "}" => Statement::Fn { name: n, params: ps, body: b },
+    <Styled>
 }
+
+Styled: Statement = {
+    "style" "{" <s:Stmt*> "}" "as" <l:StyleList> => Statement::Styled { stmts: s, style: l }
+};
+
+StyleList: HashMap<String, String> = {
+    "{" "}" => HashMap::new(),
+    "{" <StyleListIn> "}",
+};
+
+StyleListIn: HashMap<String, String> = {
+    <mut l:StyleListIn> "," <k:Var> ":" "\"" <v:Var> "\"" => {l.insert(k, v); l},
+    <k:Var> ":" <v:Str> => { let mut l = HashMap::new(); l.insert(k,v); l }
+};
+
 StmtInFn: Statement = "let" <v:Var> "=" <a:Atom> ";" => Statement::Def(v, a);
 
 FnBody: Vec<Statement> = {
@@ -91,7 +108,7 @@ ListIn: Vec<Expr> = {
     <a:Atom> => vec![a],
 };
 
-VarList: Vec<(String, crate::type_check::ExprType)> = {
+VarList: Vec<(String, ExprType)> = {
     "(" <VarListIn> ")",
     "(" ")" => vec![],
 }
@@ -114,6 +131,8 @@ Ty: ExprType = {
 Var: String = <s:r#"[_a-zA-Z][_a-zA-Z0-9]*"#> => s.to_owned();
 
 Num: Expr = <s:r#"((\d+\.?\d*)|(\.\d+))"#> => Expr::Num(f32::from_str(s).unwrap());
+
+Str: String = <s:r#""(?:[^"\\]*(?:\\.)?)*""#> => s.strip_prefix('"').unwrap_or(s).strip_suffix('"').unwrap_or(s).to_string();
 
 Boxed<T>: Box<T> = {
     <mut x:(<T>)> => bx(x)
