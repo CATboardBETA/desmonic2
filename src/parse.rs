@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
 use crate::type_check::ExprType;
 use lalrpop_util::lalrpop_mod;
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -48,6 +48,21 @@ impl FromStr for ComparisonOp {
     }
 }
 
+impl ComparisonOp {
+    fn from_str_single_eq(s: &str) -> Self {
+        use ComparisonOp::*;
+        match s {
+            "=" => Eq,
+            "!=" => Ne,
+            ">" => Gt,
+            "<" => Lt,
+            ">=" => Ge,
+            "<=" => Le,
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl Display for ComparisonOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -90,6 +105,7 @@ pub enum Expr {
     Point(Box<Expr>, Box<Expr>),
     Point3(Box<Expr>, Box<Expr>, Box<Expr>),
     Call(String, Vec<Expr>),
+    Abs(Box<Expr>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -117,8 +133,9 @@ pub enum Statement {
     },
     Styled {
         stmts: Vec<Statement>,
-        style: HashMap<String, String>
-    }
+        style: HashMap<String, String>,
+    },
+    Implicit(Expr, ComparisonOp, Expr),
 }
 
 fn bx<T>(x: T) -> Box<T> {

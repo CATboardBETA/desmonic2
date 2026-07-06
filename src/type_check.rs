@@ -2,23 +2,36 @@ use crate::parse::{Elif, Expr, Statement};
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, String)>> = LazyLock::new(|| {
-    use ExprType::*;
-    macro_rules! i {
+pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, String)>> =
+    LazyLock::new(|| {
+        use ExprType::*;
+        macro_rules! i {
         ($h:ident, $($n:expr, $($tys:expr)*, $ty:expr, $al:expr);*) => {
             $($h.insert($n.to_string(), (vec![$($tys),*], $ty, $al.to_string()));)*
         };
     }
-    let mut h = HashMap::new();
-    i!{ h,
-        "mod", Num Num, Num, "mod";
-        "sgn", Num, Num, "sgn";
-        "sign", Num, Num, "sgn";
-        "signum", Num, Num, "sgn";
-        "cos", Num, Num, "cos"
-    }
-    h
-});
+        let mut h = HashMap::new();
+        i! { h,
+            "mod",      Num Num, Num,       "mod";
+            "modl",     NumList Num, NumList, "mod";
+            "modl2",    Num NumList, NumList, "mod";
+            "modll",    NumList NumList, NumList, "mod";
+            "sgn",      Num, Num,           "sgn";
+            "sign",     Num, Num,           "sgn";
+            "signum",   Num, Num,           "sgn";
+            "sgnl",     NumList, NumList,   "sgn";
+            "signl",    NumList, NumList,   "sgn";
+            "signuml",  NumList, NumList,   "sgn";
+            "cos",      Num, Num,           "cos";
+            "cosl",     NumList, NumList,   "cos";
+            "abs",      Num, Num,           "abs";
+            "absl",     NumList, NumList,   "abs";
+            "abspl",    PointList, Num,     "abs";
+            "min",      NumList, Num,       "min";
+            "max",      NumList, Num,       "max"
+        }
+        h
+    });
 
 macro_rules! naction {
     ($errs:expr; $expr:expr; $($v:expr),+) => {{
@@ -247,6 +260,19 @@ pub fn check(
                 unreachable!()
             };
             check(last, &mut vars, funcs, errs)
+        }
+        Expr::Abs(e) => {
+            let inner_ty = check(*e, vars, funcs, errs);
+            match inner_ty {
+                ExprType::Conflict => ExprType::Conflict,
+                ExprType::Num => ExprType::Num,
+                ExprType::Action => ExprType::Conflict,
+                ExprType::Point => ExprType::Num,
+                ExprType::Point3 => ExprType::Num,
+                ExprType::NumList => ExprType::NumList,
+                ExprType::PointList => ExprType::NumList,
+                ExprType::Point3List => ExprType::NumList,
+            }
         }
     }
 }

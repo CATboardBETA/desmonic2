@@ -1,6 +1,7 @@
 use crate::parse::Statement;
 use crate::transpile::transpile_many;
 use crate::type_check::ExprType;
+use crate::type_check::ExprType::{Num, NumList};
 use clap::{Parser, Subcommand, builder::Styles};
 use generate::GraphState;
 use std::collections::HashMap;
@@ -62,7 +63,11 @@ fn main() {
         let file_str = fs::read_to_string(input).expect("Failed to read input file.");
         let ast = parse::gen_ast(&file_str).unwrap();
         let mut vars = HashMap::new();
-        let mut funcs = type_check::BUILTIN_FUNCS.clone().into_iter().map(|(k, (v1, v2, _))| (k, (v1,v2))).collect();
+        let mut funcs = type_check::BUILTIN_FUNCS
+            .clone()
+            .into_iter()
+            .map(|(k, (v1, v2, _))| (k, (v1, v2)))
+            .collect();
         let mut errs = vec![];
         for stmt in ast.clone() {
             type_check(stmt, &mut vars, &mut funcs, &mut errs);
@@ -83,7 +88,12 @@ fn main() {
     }
 }
 
-fn type_check(stmt: Statement, vars: &mut HashMap<String, ExprType>, funcs: &mut HashMap<String, (Vec<ExprType>, ExprType)>, errs: &mut Vec<String>) {
+fn type_check(
+    stmt: Statement,
+    vars: &mut HashMap<String, ExprType>,
+    funcs: &mut HashMap<String, (Vec<ExprType>, ExprType)>,
+    errs: &mut Vec<String>,
+) {
     match stmt {
         Statement::Expr(e) => {
             type_check::check(e, vars, funcs, errs);
@@ -100,19 +110,28 @@ fn type_check(stmt: Statement, vars: &mut HashMap<String, ExprType>, funcs: &mut
                 let Statement::Def(n, e) = x else {
                     unreachable!()
                 };
-                let typed =
-                    type_check::check(e.clone(), &mut locals,  funcs,  errs);
+                let typed = type_check::check(e.clone(), &mut locals, funcs, errs);
                 locals.insert(n.clone(), typed);
             }
             let Statement::Expr(last) = last[0].clone() else {
                 unreachable!()
             };
-            let typed = type_check::check(last, &mut locals,  funcs,  errs);
+            let typed = type_check::check(last, &mut locals, funcs, errs);
             funcs.insert(name, (params.iter().map(|x| x.1).collect(), typed));
         }
         Statement::Styled { stmts, .. } => {
             for stmt in stmts {
                 type_check(stmt, vars, funcs, errs);
+            }
+        }
+        Statement::Implicit(e1, _cmp, e2) => {
+            let e1 = type_check::check(e1, vars, funcs, errs);
+            let e2 = type_check::check(e2, vars, funcs, errs);
+            if e1 != e2 {
+                errs.push("Implicit should have equivalent types on each side".to_string());
+            }
+            if e1 != Num || e1 != NumList || e2 != Num || e2 != NumList {
+                errs.push("Implicit may only be of numbers and lists of numbers".to_string());
             }
         }
     }

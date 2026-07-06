@@ -10,6 +10,7 @@ pub Program = <Stmt*>;
 
 Stmt: Statement = {
     <a:Atom> ";" => Statement::Expr(a),
+    <a1:Atom> <c:Comp> <a2:Atom> ";" => Statement::Implicit(a1, c, a2),
     "let" <v:Var> "=" <a:Atom> ";" => Statement::Def(v, a),
     "fn" <n:Var> <ps:VarList> "{" <b:FnBody> "}" => Statement::Fn { name: n, params: ps, body: b },
     <Styled>
@@ -25,7 +26,7 @@ StyleList: HashMap<String, String> = {
 };
 
 StyleListIn: HashMap<String, String> = {
-    <mut l:StyleListIn> "," <k:Var> ":" "\"" <v:Var> "\"" => {l.insert(k, v); l},
+    <mut l:StyleListIn> "," <k:Var> ":" <v:Str> => {l.insert(k, v); l},
     <k:Var> ":" <v:Str> => { let mut l = HashMap::new(); l.insert(k,v); l }
 };
 
@@ -77,12 +78,20 @@ Elif: Elif = "elif" <cmp:FullComp> "{" <body:Boxed<Atom>> "}" => Elif {cmp, body
 
 FullComp: Comparison = <c:Boxed<Atom>> <c0:Comp> <c1:Boxed<Atom>> <c2:(Comp Boxed<Atom>)?> => Comparison(c,c0,c1,c2);
 
-Comp: ComparisonOp = <s:r#"(==|>|<|>=|<=|!=)"#> => ComparisonOp::from_str(s).unwrap();
+Comp: ComparisonOp = {
+    <s:"=="> => ComparisonOp::from_str(s).unwrap(),
+    <s:">"> => ComparisonOp::from_str(s).unwrap(),
+    <s:"<"> => ComparisonOp::from_str(s).unwrap(),
+    <s:">="> => ComparisonOp::from_str(s).unwrap(),
+    <s:"<="> => ComparisonOp::from_str(s).unwrap(),
+};
+CompImp: ComparisonOp = <s:r#"(=|>|<|>=|<=)"#> => ComparisonOp::from_str_single_eq(s);
 
 A: Expr = {
     Num,
     <v:Var> => Expr::Var(v),
     "(" <Atom> ")",
+    "|" <v:Boxed<Atom>> "|" => Expr::Abs(v),
     List,
     Point,
     Call,

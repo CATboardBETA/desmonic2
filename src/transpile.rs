@@ -1,5 +1,5 @@
 use crate::parse::{Comparison, Expr, Statement};
-use crate::type_check::ExprType;
+use crate::type_check::{BUILTIN_FUNCS, ExprType};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -82,15 +82,15 @@ pub fn transpile_many(
                 let mut other = hm();
                 other.insert("hidden".to_string(), Value::Bool(true));
 
-                exprs.append(&mut transpile_many(
-                    body.into(),
-                    Some((name, params, &vec![])),
-                    id,
-                    Some(f_id),
-                ).into_iter().map(|mut e| {
-                    e.other = other.clone();
-                    e
-                }).collect());
+                exprs.append(
+                    &mut transpile_many(body.into(), Some((name, params, &vec![])), id, Some(f_id))
+                        .into_iter()
+                        .map(|mut e| {
+                            e.other = other.clone();
+                            e
+                        })
+                        .collect(),
+                );
                 id += 1;
                 let Statement::Expr(e) = last else {
                     unreachable!()
@@ -135,9 +135,24 @@ pub fn transpile_many(
             Statement::Styled { stmts, style } => {
                 let new = transpile_many(stmts, fn_name, id, fold_id);
                 exprs.extend(new.into_iter().map(|mut x| {
-                    x.other.extend(style.iter().map(|(k,v)| (k.clone(), Value::String(v.clone()))));
+                    x.other.extend(
+                        style
+                            .iter()
+                            .map(|(k, v)| (k.clone(), Value::String(v.clone()))),
+                    );
                     x
                 }))
+            }
+            Statement::Implicit(ref lhs, cmp, ref rhs) => {
+                let lhs = tr(lhs, fn_name, &mut exprs, &mut (id, fold_id));
+
+                let rhs = tr(rhs, fn_name, &mut exprs, &mut (id, fold_id));
+                exprs.push(DesmoExpr {
+                    id,
+                    folder_id: fold_id,
+                    content: format!("{}{}{}", lhs, cmp, rhs),
+                    other: hm(),
+                })
             }
         }
     }
@@ -271,11 +286,12 @@ fn tr(
                 .map(|x| tr(x, fn_name, exprs, ids))
                 .collect::<Vec<_>>()
                 .join(",");
-            if ! crate::type_check::BUILTIN_FUNCS.contains_key(name) {
+            if !BUILTIN_FUNCS.contains_key(name) {
                 // User defined function
                 let name = ident_ify(name);
                 format!("{name}\\left({params}\\right)")
             } else {
+                let name = BUILTIN_FUNCS[name].2.clone();
                 // Builtin function
                 format!("\\operatorname{{{name}}}\\left({params}\\right)")
             }
@@ -343,6 +359,7 @@ fn tr(
                 tr(over, fn_name, exprs, ids)
             )
         }
+        Expr::Abs(e) => format!("\\left|{}\\right|", tr(e, fn_name, exprs, ids)),
     }
 }
 
