@@ -1,5 +1,24 @@
 use crate::parse::{Elif, Expr, Statement};
 use std::collections::HashMap;
+use std::sync::LazyLock;
+
+pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, String)>> = LazyLock::new(|| {
+    use ExprType::*;
+    macro_rules! i {
+        ($h:ident, $($n:expr, $($tys:expr)*, $ty:expr, $al:expr);*) => {
+            $($h.insert($n.to_string(), (vec![$($tys),*], $ty, $al.to_string()));)*
+        };
+    }
+    let mut h = HashMap::new();
+    i!{ h,
+        "mod", Num Num, Num, "mod";
+        "sgn", Num, Num, "sgn";
+        "sign", Num, Num, "sgn";
+        "signum", Num, Num, "sgn";
+        "cos", Num, Num, "cos"
+    }
+    h
+});
 
 macro_rules! naction {
     ($errs:expr; $expr:expr; $($v:expr),+) => {{
@@ -28,7 +47,7 @@ pub enum ExprType {
 pub fn check(
     ast: Expr,
     vars: &mut HashMap<String, ExprType>,
-    funcs: &mut HashMap<String, ExprType>,
+    funcs: &mut HashMap<String, (Vec<ExprType>, ExprType)>,
     errs: &mut Vec<String>,
 ) -> ExprType {
     use ExprType as Et;
@@ -201,25 +220,18 @@ pub fn check(
                 Et::Point3
             }
         }
-        Expr::Call(name, _params) => *funcs.get(&name).unwrap_or_else(|| {
+        Expr::Call(name, _params) => funcs.get(&name).map(|x| x.1).unwrap_or_else(|| {
             errs.push(format!("Function `{name}` not found"));
-            &Et::Conflict
+            Et::Conflict
         }),
         Expr::For { over, ident, body } => {
             let over_ty = check(*over, vars, funcs, errs);
             match over_ty {
-                ExprType::Conflict => {
-                    errs.push("Cannot iterate over a type conflict".to_string())
-                }
-                ExprType::Num |
-                ExprType::Action |
-                ExprType::Point |
-                ExprType::Point3 => {
+                ExprType::Conflict => errs.push("Cannot iterate over a type conflict".to_string()),
+                ExprType::Num | ExprType::Action | ExprType::Point | ExprType::Point3 => {
                     errs.push(format!("Cannot iterate over type `{over_ty:?}`"))
                 }
-                ExprType::NumList |
-                ExprType::PointList |
-                ExprType::Point3List => {}
+                ExprType::NumList | ExprType::PointList | ExprType::Point3List => {}
             }
             let mut vars = HashMap::new();
             vars.insert(ident, over_ty);

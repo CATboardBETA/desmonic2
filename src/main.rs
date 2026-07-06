@@ -61,8 +61,8 @@ fn main() {
     if let Commands::Build { input, .. } = cli.command {
         let file_str = fs::read_to_string(input).expect("Failed to read input file.");
         let ast = parse::gen_ast(&file_str).unwrap();
-        let mut vars = HashMap::<String, ExprType>::new();
-        let mut funcs = HashMap::<String, ExprType>::new();
+        let mut vars = HashMap::new();
+        let mut funcs = type_check::BUILTIN_FUNCS.clone().into_iter().map(|(k, (v1, v2, _))| (k, (v1,v2))).collect();
         let mut errs = vec![];
         for stmt in ast.clone() {
             type_check(stmt, &mut vars, &mut funcs, &mut errs);
@@ -83,7 +83,7 @@ fn main() {
     }
 }
 
-fn type_check(stmt: Statement, vars: &mut HashMap<String, ExprType>, funcs: &mut HashMap<String, ExprType>, errs: &mut Vec<String>) {
+fn type_check(stmt: Statement, vars: &mut HashMap<String, ExprType>, funcs: &mut HashMap<String, (Vec<ExprType>, ExprType)>, errs: &mut Vec<String>) {
     match stmt {
         Statement::Expr(e) => {
             type_check::check(e, vars, funcs, errs);
@@ -95,7 +95,7 @@ fn type_check(stmt: Statement, vars: &mut HashMap<String, ExprType>, funcs: &mut
         Statement::Fn { name, body, params } => {
             let (rest, last) = body.split_at(body.len() - 1);
             let mut locals = vars.clone();
-            locals.extend(params);
+            locals.extend(params.clone());
             for x in rest {
                 let Statement::Def(n, e) = x else {
                     unreachable!()
@@ -108,7 +108,7 @@ fn type_check(stmt: Statement, vars: &mut HashMap<String, ExprType>, funcs: &mut
                 unreachable!()
             };
             let typed = type_check::check(last, &mut locals,  funcs,  errs);
-            funcs.insert(name, typed);
+            funcs.insert(name, (params.iter().map(|x| x.1).collect(), typed));
         }
         Statement::Styled { stmts, .. } => {
             for stmt in stmts {

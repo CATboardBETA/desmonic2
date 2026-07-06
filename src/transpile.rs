@@ -266,14 +266,19 @@ fn tr(
             )
         }
         Expr::Call(name, params) => {
-            let name = ident_ify(name);
             let params = params
                 .iter()
                 .map(|x| tr(x, fn_name, exprs, ids))
                 .collect::<Vec<_>>()
                 .join(",");
-
-            format!("{name}\\left({params}\\right)")
+            if ! crate::type_check::BUILTIN_FUNCS.contains_key(name) {
+                // User defined function
+                let name = ident_ify(name);
+                format!("{name}\\left({params}\\right)")
+            } else {
+                // Builtin function
+                format!("\\operatorname{{{name}}}\\left({params}\\right)")
+            }
         }
         Expr::For { over, ident, body } => {
             let Some((last, rest)) = body.split_last() else {
