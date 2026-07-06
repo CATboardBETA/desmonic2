@@ -233,10 +233,28 @@ pub fn check(
                 Et::Point3
             }
         }
-        Expr::Call(name, _params) => funcs.get(&name).map(|x| x.1).unwrap_or_else(|| {
-            errs.push(format!("Function `{name}` not found"));
-            Et::Conflict
-        }),
+        Expr::Call(name, params_found) => {
+            let (params, func) = funcs.get(&name).cloned().unwrap_or_else(|| {
+                errs.push(format!("Function `{name}` not found"));
+                (vec![], Et::Conflict)
+            });
+            if params.len() == params_found.len() {
+                for (i, (par_found, par_real)) in params_found.into_iter().zip(params).enumerate() {
+                    let par_found = check(par_found, vars, funcs, errs);
+                    if par_found != par_real {
+                        errs.push(format!("Param {i} of function {name} should have type {par_real:?}, but has type {par_found:?}"));
+                    }
+                }
+            } else {
+                errs.push(format!(
+                    "Call to function `{}` should have {} params, got {} params",
+                    name,
+                    params.len(),
+                    params_found.len()
+                ))
+            }
+            func
+        }
         Expr::For { over, ident, body } => {
             let over_ty = check(*over, vars, funcs, errs);
             match over_ty {
