@@ -67,6 +67,7 @@ struct Expressions {
 enum Expression {
     Expression {
         color: Option<String>,
+        #[serde(rename = "folderId")]
         folder_id: Option<String>,
         id: String,
         latex: String,

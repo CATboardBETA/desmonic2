@@ -129,7 +129,7 @@ pub fn transpile_many(
                     id,
                     folder_id: Some(f_id),
                     content: format!("{}\\left({}\\right)={}", name_fmt, params_fmt, val),
-                    other: hm(),
+                    other,
                 })
             }
             Statement::Styled { stmts, style } => {
