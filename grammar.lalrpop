@@ -1,8 +1,9 @@
 use std::str::FromStr;
 use std::collections::HashMap;
 use std::vec;
-use crate::parse::{Comparison, ComparisonOp, Elif, Expr, Statement, bx};
-use crate::type_check::ExprType;
+use std::sync::{Arc, Mutex};
+use crate::parse::{Dot, Comparison, ComparisonOp, Elif, Expr, Statement, bx};
+use crate::type_check::{ExprType, STRUCTS, StructTy, StructStorage};
 
 grammar;
 
@@ -13,7 +14,8 @@ Stmt: Statement = {
     <a1:Atom> <c:Comp> <a2:Atom> ";" => Statement::Implicit(a1, c, a2),
     "let" <v:Var> "=" <a:Atom> ";" => Statement::Def(v, a),
     "fn" <n:Var> <ps:VarList> "{" <b:FnBody> "}" => Statement::Fn { name: n, params: ps, body: b },
-    <Styled>
+    <Styled>,
+    <Struct>,
 }
 
 Styled: Statement = {
@@ -45,7 +47,9 @@ FnBodyIn: Vec<Statement> = {
 Atom: Expr = {
     #[precedence(level="1")]
     <A>,
-    #[precedence(level="2")] #[assoc(side="right")]
+    #[precedence(level="2")]
+    <x:Var> "." <y:Var> => Expr::Dot(Dot { x, y, struct_storage: StructTy { name: Arc::new(Mutex::new("".to_string())), index: Arc::new(Mutex::new(HashMap::new())), storage: Arc::new(Mutex::new(StructStorage::Unknown)) }}),
+    #[precedence(level="3")] #[assoc(side="right")]
     <a:Atom> "^" <b:Atom> => Expr::Exp(bx(a), bx(b)),
     #[precedence(level="4")] #[assoc(side="left")]
     <a:Atom> "*" <b:Atom> => Expr::Mul(bx(a), bx(b)),
@@ -85,7 +89,6 @@ Comp: ComparisonOp = {
     <s:">="> => ComparisonOp::from_str(s).unwrap(),
     <s:"<="> => ComparisonOp::from_str(s).unwrap(),
 };
-CompImp: ComparisonOp = <s:r#"(=|>|<|>=|<=)"#> => ComparisonOp::from_str_single_eq(s);
 
 A: Expr = {
     Num,
@@ -127,6 +130,16 @@ VarListIn: Vec<(String, ExprType)> = {
     <v:Var> ":" <t:Ty> => vec![(v,t)]
 }
 
+Struct: Statement = {
+    "struct" <n:Var> "{" <s:StructIn> "}" => {STRUCTS.lock().unwrap().insert(n.clone(), s.clone()); Statement::Struct(n, s)},
+    "struct" <n:Var> "{" "}" => {STRUCTS.lock().unwrap().insert(n.clone(), HashMap::new()); Statement::Struct(n, HashMap::new())},
+}
+
+StructIn: HashMap<String, ExprType> = {
+    <mut l:StructIn> "," <v:Var> ":" <t:Ty> => {l.insert(v, t); l},
+    <v:Var> ":" <t:Ty> => {let mut l = HashMap::new(); l.insert(v, t); l}
+}
+
 Ty: ExprType = {
     "Num" => ExprType::Num,
     "Action" => ExprType::Action,
@@ -135,6 +148,15 @@ Ty: ExprType = {
     "L<Num>" => ExprType::NumList,
     "L<Point>" => ExprType::PointList,
     "L<Point3>" => ExprType::Point3List,
+    <name:Var> => if STRUCTS.lock().unwrap().contains_key(&name) {
+        ExprType::Struct(StructTy {
+            name: Arc::new(Mutex::new(name)),
+            index: Arc::new(Mutex::new(HashMap::new())),
+            storage: Arc::new(Mutex::new(StructStorage::Unknown)),
+        })
+    } else {
+        ExprType::Conflict
+    }
 };
 
 Var: String = <s:r#"[_a-zA-Z][_a-zA-Z0-9]*"#> => s.to_owned();

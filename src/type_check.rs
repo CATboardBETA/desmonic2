@@ -1,6 +1,8 @@
-use crate::parse::{Elif, Expr, Statement};
+use crate::parse::{Dot, Elif, Expr, Statement};
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::mem::discriminant;
+use std::ops::Deref;
+use std::sync::{Arc, LazyLock, Mutex};
 
 pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, String)>> =
     LazyLock::new(|| {
@@ -33,6 +35,9 @@ pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, Str
         h
     });
 
+pub static STRUCTS: LazyLock<Mutex<HashMap<String, HashMap<String, ExprType>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 macro_rules! naction {
     ($errs:expr; $expr:expr; $($v:expr),+) => {{
         if $($v == Et::Action ||)* false {
@@ -43,7 +48,7 @@ macro_rules! naction {
     }};
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum ExprType {
     Conflict,
 
@@ -55,6 +60,39 @@ pub enum ExprType {
     NumList,
     PointList,
     Point3List,
+    /// If there is exactly one type, it is transparent. If there is more than one type, and all
+    /// types are non-list, than it is stored in a list. Otherwise, each element is stored in its
+    /// own variable.
+    Struct(StructTy),
+    StructList(StructTy),
+}
+
+impl PartialEq for ExprType {
+    fn eq(&self, other: &Self) -> bool {
+        discriminant(self) == discriminant(other)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum StructStorage {
+    Unknown,
+    OneVar(String),
+    // List(String),
+    ManyVars(Vec<String>),
+}
+
+#[derive(Debug, Clone)]
+pub struct StructTy {
+    pub(crate) name: Arc<Mutex<String>>,
+    pub(crate) index: Arc<Mutex<HashMap<String, usize>>>,
+    pub(crate) storage: Arc<Mutex<StructStorage>>,
+}
+
+impl PartialEq for StructTy {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.lock().unwrap().deref() == other.name.lock().unwrap().deref()
+            && self.storage.lock().unwrap().deref() == other.storage.lock().unwrap().deref()
+    }
 }
 
 pub fn check(
@@ -108,7 +146,7 @@ pub fn check(
                 errs.push(format!("Variable {v} does not exist"));
                 Et::Conflict
             }
-            Some(v) => *v,
+            Some(v) => v.clone(),
         },
         Expr::If {
             cmp: _,
@@ -142,10 +180,14 @@ pub fn check(
             if tys
                 .array_windows()
                 .into_iter()
-                .all(|&[a, b]| a == b && a != Et::Action)
+                .all(|[a, b]| a.clone() == b.clone() && a.clone() != Et::Action)
             {
-                let ty = *tys.first().unwrap_or(&Et::Num);
-                if ty == Et::NumList || ty == Et::PointList || ty == Et::Point3List {
+                let ty = tys.first().unwrap_or(&Et::Num).clone();
+                if ty == Et::NumList
+                    || ty == Et::PointList
+                    || ty == Et::Point3List
+                    || matches!(ty, Et::StructList(..))
+                {
                     errs.push("Cannot have a list in a list".to_string());
                     Et::Conflict
                 } else {
@@ -171,6 +213,19 @@ pub fn check(
                         }
                         ExprType::Point3List => {
                             errs.push("Cannot have a list of 3D points in a list".to_string());
+                            Et::Conflict
+                        }
+                        ExprType::Struct(StructTy {
+                            index,
+                            storage,
+                            name,
+                        }) => Et::StructList(StructTy {
+                            storage,
+                            name,
+                            index,
+                        }),
+                        ExprType::StructList(..) => {
+                            errs.push("Cannot have a list of structs in a list".to_string());
                             Et::Conflict
                         }
                     }
@@ -259,10 +314,17 @@ pub fn check(
             let over_ty = check(*over, vars, funcs, errs);
             match over_ty {
                 ExprType::Conflict => errs.push("Cannot iterate over a type conflict".to_string()),
-                ExprType::Num | ExprType::Action | ExprType::Point | ExprType::Point3 => {
+                ExprType::Num
+                | ExprType::Action
+                | ExprType::Point
+                | ExprType::Point3
+                | ExprType::Struct(_) => {
                     errs.push(format!("Cannot iterate over type `{over_ty:?}`"))
                 }
-                ExprType::NumList | ExprType::PointList | ExprType::Point3List => {}
+                ExprType::NumList
+                | ExprType::PointList
+                | ExprType::Point3List
+                | ExprType::StructList(_) => {}
             }
             let mut vars = HashMap::new();
             vars.insert(ident, over_ty);
@@ -290,6 +352,32 @@ pub fn check(
                 ExprType::NumList => ExprType::NumList,
                 ExprType::PointList => ExprType::NumList,
                 ExprType::Point3List => ExprType::NumList,
+                ExprType::Struct(_) => ExprType::Conflict,
+                ExprType::StructList(_) => ExprType::Conflict,
+            }
+        }
+        Expr::Dot(Dot {
+            struct_storage,
+            x,
+            y,
+        }) => {
+            let ExprType::Struct(x_ty) = vars[&x].clone() else {
+                unreachable!()
+            };
+            let x_ty_name = x_ty.name.lock().unwrap().clone();
+            if let Some(ty) = STRUCTS.lock().unwrap().deref()[&x_ty_name].get(&y) {
+                *struct_storage.storage.lock().unwrap() = x_ty.storage.lock().unwrap().clone();
+                *struct_storage.name.lock().unwrap() = x_ty_name;
+                *struct_storage.index.lock().unwrap() = x_ty.index.lock().unwrap().clone();
+                ty.clone()
+            } else {
+                errs.push(format!(
+                    "Struct `{}` (named `{}`) has no field `{}`",
+                    struct_storage.name.lock().unwrap(),
+                    x,
+                    y
+                ));
+                ExprType::Conflict
             }
         }
     }

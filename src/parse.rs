@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::type_check::ExprType;
+use crate::type_check::{ExprType, StructTy};
 use lalrpop_util::lalrpop_mod;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -106,6 +106,20 @@ pub enum Expr {
     Point3(Box<Expr>, Box<Expr>, Box<Expr>),
     Call(String, Vec<Expr>),
     Abs(Box<Expr>),
+    Dot(Dot),
+}
+
+#[derive(Debug, Clone)]
+pub struct Dot {
+    pub struct_storage: StructTy,
+    pub x: String,
+    pub y: String,
+}
+
+impl PartialEq for Dot {
+    fn eq(&self, other: &Self) -> bool {
+        self.x == other.x && self.y == other.y && self.struct_storage == other.struct_storage
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -136,6 +150,7 @@ pub enum Statement {
         style: HashMap<String, String>,
     },
     Implicit(Expr, ComparisonOp, Expr),
+    Struct(String, HashMap<String, ExprType>),
 }
 
 fn bx<T>(x: T) -> Box<T> {

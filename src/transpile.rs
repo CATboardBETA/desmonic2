@@ -1,10 +1,16 @@
-use crate::parse::{Comparison, Expr, Statement};
-use crate::type_check::{BUILTIN_FUNCS, ExprType};
+use crate::parse::{Comparison, Dot, Expr, Statement};
+use crate::type_check::{BUILTIN_FUNCS, ExprType, STRUCTS, StructStorage};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::ops::Deref;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicI32, Ordering};
+use convert_case::ccase;
 
 static FOR_ID: AtomicI32 = AtomicI32::new(0);
+
+/// This really should be passed as an argument, but there's already so many on `tr`...
+static ERRS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 #[derive(Debug)]
 pub struct DesmoExpr {
@@ -153,6 +159,10 @@ pub fn transpile_many(
                     content: format!("{}{}{}", lhs, cmp, rhs),
                     other: hm(),
                 })
+            }
+            Statement::Struct(_, _) => {
+                // Struct definitions don't transpile into anything. They are only used by the Desmonic
+                // transpiler.
             }
         }
     }
@@ -360,6 +370,20 @@ fn tr(
             )
         }
         Expr::Abs(e) => format!("\\left|{}\\right|", tr(e, fn_name, exprs, ids)),
+        Expr::Dot(Dot {
+            struct_storage,
+            x: _,
+            y,
+        }) => match struct_storage.storage.lock().unwrap().deref() {
+            StructStorage::Unknown => unreachable!(),
+            StructStorage::OneVar(v) => {
+                ident_ify(&ccase!(camel, format!("{}_{}", struct_storage.name.lock().unwrap(), y)))
+            }
+            StructStorage::ManyVars(vs) => {
+                let v = vs[struct_storage.index.lock().unwrap()[y]].clone();
+                ident_ify(&ccase!(camel, v))
+            }
+        },
     }
 }
 

@@ -1,11 +1,14 @@
+#![allow(clippy::type_complexity)]
 use crate::parse::Statement;
 use crate::transpile::transpile_many;
-use crate::type_check::ExprType;
 use crate::type_check::ExprType::{Num, NumList};
-use clap::{Parser, Subcommand, builder::Styles};
+use crate::type_check::{ExprType, StructStorage, StructTy, STRUCTS};
+use clap::{builder::Styles, Parser, Subcommand};
+use convert_case::ccase;
 use generate::GraphState;
 use std::collections::HashMap;
 use std::fs;
+use std::ops::Deref;
 
 mod generate;
 mod parse;
@@ -61,7 +64,7 @@ fn main() {
     let cli = Cli::parse();
     if let Commands::Build { input, .. } = cli.command {
         let file_str = fs::read_to_string(input).expect("Failed to read input file.");
-        let ast = parse::gen_ast(&file_str).unwrap();
+        let mut ast = parse::gen_ast(&file_str).unwrap();
         let mut vars = HashMap::new();
         let mut funcs = type_check::BUILTIN_FUNCS
             .clone()
@@ -69,9 +72,7 @@ fn main() {
             .map(|(k, (v1, v2, _))| (k, (v1, v2)))
             .collect();
         let mut errs = vec![];
-        for stmt in ast.clone() {
-            type_check(stmt, &mut vars, &mut funcs, &mut errs);
-        }
+        type_check(&mut ast, &mut vars, &mut funcs, &mut errs);
         let transpiled = transpile_many(ast, None, 0, None);
 
         if !errs.is_empty() {
@@ -89,50 +90,175 @@ fn main() {
 }
 
 fn type_check(
-    stmt: Statement,
+    stmts: &mut Vec<Statement>,
     vars: &mut HashMap<String, ExprType>,
     funcs: &mut HashMap<String, (Vec<ExprType>, ExprType)>,
     errs: &mut Vec<String>,
 ) {
-    match stmt {
-        Statement::Expr(e) => {
-            type_check::check(e, vars, funcs, errs);
-        }
-        Statement::Def(n, e) => {
-            let typed = type_check::check(e, vars, funcs, errs);
-            vars.insert(n, typed);
-        }
-        Statement::Fn { name, body, params } => {
-            let (rest, last) = body.split_at(body.len() - 1);
-            let mut locals = vars.clone();
-            locals.extend(params.clone());
-            for x in rest {
-                let Statement::Def(n, e) = x else {
+    for stmt in stmts.iter_mut() {
+        match stmt {
+            Statement::Expr(e) => {
+                type_check::check(e.clone(), vars, funcs, errs);
+            }
+            Statement::Def(n, e) => {
+                let mut typed = type_check::check(e.clone(), vars, funcs, errs);
+                if let ExprType::Struct(StructTy {
+                    name,
+                    index: _,
+                    storage,
+                }) = &mut typed
+                {
+                    if let Some(struc) = STRUCTS.lock().unwrap().get(name.lock().unwrap().deref()) {
+                        let len = struc.len();
+                        *storage.lock().unwrap() = if len == 1 {
+                            StructStorage::OneVar(ccase!(
+                                camel,
+                                format!("{}_{}", name.lock().unwrap(), n)
+                            ))
+                        } else {
+                            StructStorage::ManyVars(
+                                struc
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, _)| {
+                                        ccase!(
+                                            camel,
+                                            format!("{}_{}{}", name.lock().unwrap(), n, i)
+                                        )
+                                    })
+                                    .collect(),
+                            )
+                        };
+                    } else {
+                        errs.push(format!("Struct `{}` does not exist", name.lock().unwrap()))
+                    }
+                }
+                vars.insert(n.clone(), typed);
+            }
+            Statement::Fn { name, body, params: paramsog } => {
+                let params: Vec<_> = paramsog
+                    .iter_mut()
+                    .map(|x1| {
+                        if let ExprType::Struct(StructTy {
+                            name,
+                            index,
+                            storage,
+                        }) = &mut x1.1
+                        {
+                            let name: String = name.lock().unwrap().clone();
+                            if let Some(struc) = STRUCTS.lock().unwrap().get(&name) {
+                                let len = struc.len();
+                                *index.lock().unwrap() = struc
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, (k, _))| (k.clone(), i))
+                                    .collect();
+                                if len == 1 {
+                                    let name = format!("{}_{}", name, x1.0);
+                                    *storage.lock().unwrap() =
+                                        StructStorage::OneVar(ccase!(camel, name.clone()));
+                                } else {
+                                    *storage.lock().unwrap() = StructStorage::ManyVars(
+                                        struc
+                                            .iter()
+                                            .enumerate()
+                                            .map(|(i, _)| {
+                                                ccase!(camel, format!("{}{}_{}", name, i, x1.0))
+                                            })
+                                            .collect(),
+                                    );
+                                }
+                            } else {
+                                errs.push(format!("Struct `{}` does not exist", name));
+                            }
+                        }
+                        x1.clone()
+                    })
+                    .collect();
+                let (rest, last) = body.split_at(body.len() - 1);
+                let mut locals = vars.clone();
+                locals.extend(params.clone());
+                for x in rest {
+                    let Statement::Def(n, e) = x else {
+                        unreachable!()
+                    };
+                    let typed = type_check::check(e.clone(), &mut locals, funcs, errs);
+                    locals.insert(n.clone(), typed);
+                }
+                let Statement::Expr(last) = last[0].clone() else {
                     unreachable!()
                 };
-                let typed = type_check::check(e.clone(), &mut locals, funcs, errs);
-                locals.insert(n.clone(), typed);
+                let typed = type_check::check(last, &mut locals, funcs, errs);
+                funcs.insert(
+                    name.clone(),
+                    (params.iter().map(|x| x.1.clone()).collect(), typed),
+                );
+                *paramsog =paramsog
+                    .iter_mut()
+                    .flat_map(|x1| {
+                        if let ExprType::Struct(StructTy {
+                                                    name,
+                                                    index,
+                                                    storage,
+                                                }) = &mut x1.1
+                        {
+                            let name: String = name.lock().unwrap().clone();
+                            if let Some(struc) = STRUCTS.lock().unwrap().get(&name) {
+                                let len = struc.len();
+                                *index.lock().unwrap() = struc
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, (k, _))| (k.clone(), i))
+                                    .collect();
+                                if len == 1 {
+                                    let name = format!("{}_{}", name, x1.0);
+                                    *storage.lock().unwrap() = StructStorage::OneVar(ccase!(
+                                        camel,
+                                        name.clone()
+                                    ));
+                                    vec![(name, struc.iter().next().unwrap().1.clone())]
+                                } else {
+                                    *storage.lock().unwrap() = StructStorage::ManyVars(
+                                        struc
+                                            .iter()
+                                            .enumerate()
+                                            .map(|(i, _)| {
+                                                ccase!(camel, format!("{}{}_{}", name, i, x1.0))
+                                            })
+                                            .collect(),
+                                    );
+                                    struc
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(i, (_, v))| {
+                                            (ccase!(camel, format!("{}{}_{}", name, i, x1.0)), v.clone())
+                                        })
+                                        .collect()
+                                }
+                            } else {
+                                errs.push(format!("Struct `{}` does not exist", name));
+                                vec![]
+                            }
+                        } else {
+                            vec![x1.clone()]
+                        }
+                    })
+                    .collect::<Vec<_>>();
             }
-            let Statement::Expr(last) = last[0].clone() else {
-                unreachable!()
-            };
-            let typed = type_check::check(last, &mut locals, funcs, errs);
-            funcs.insert(name, (params.iter().map(|x| x.1).collect(), typed));
-        }
-        Statement::Styled { stmts, .. } => {
-            for stmt in stmts {
-                type_check(stmt, vars, funcs, errs);
+            Statement::Styled { stmts, .. } => {
+                type_check(stmts, vars, funcs, errs);
             }
-        }
-        Statement::Implicit(e1, _cmp, e2) => {
-            let e1 = type_check::check(e1, vars, funcs, errs);
-            let e2 = type_check::check(e2, vars, funcs, errs);
-            if e1 != e2 {
-                errs.push("Implicit should have equivalent types on each side".to_string());
+            Statement::Implicit(e1, _cmp, e2) => {
+                let e1 = type_check::check(e1.clone(), vars, funcs, errs);
+                let e2 = type_check::check(e2.clone(), vars, funcs, errs);
+                if e1 != e2 {
+                    errs.push("Implicit should have equivalent types on each side".to_string());
+                }
+                if e1 != Num || e1 != NumList || e2 != Num || e2 != NumList {
+                    errs.push("Implicit may only be of numbers or lists of numbers".to_string());
+                }
             }
-            if e1 != Num || e1 != NumList || e2 != Num || e2 != NumList {
-                errs.push("Implicit may only be of numbers and lists of numbers".to_string());
-            }
+            Statement::Struct(..) => {}
         }
     }
 }
