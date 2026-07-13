@@ -1,14 +1,15 @@
 #![allow(clippy::type_complexity)]
 use crate::parse::Statement;
-use crate::transpile::transpile_many;
+use crate::transpile::{STRUCT_ID, transpile_many};
 use crate::type_check::ExprType::{Num, NumList};
-use crate::type_check::{ExprType, StructStorage, StructTy, STRUCTS};
-use clap::{builder::Styles, Parser, Subcommand};
+use crate::type_check::{ExprType, STRUCTS, StructStorage, StructTy};
+use clap::{Parser, Subcommand, builder::Styles};
 use convert_case::ccase;
 use generate::GraphState;
 use std::collections::HashMap;
 use std::fs;
 use std::ops::Deref;
+use std::sync::atomic::Ordering;
 
 mod generate;
 mod parse;
@@ -90,7 +91,7 @@ fn main() {
 }
 
 fn type_check(
-    stmts: &mut Vec<Statement>,
+    stmts: &mut [Statement],
     vars: &mut HashMap<String, ExprType>,
     funcs: &mut HashMap<String, (Vec<ExprType>, ExprType)>,
     errs: &mut Vec<String>,
@@ -108,34 +109,32 @@ fn type_check(
                     storage,
                 }) = &mut typed
                 {
-                    if let Some(struc) = STRUCTS.lock().unwrap().get(name.lock().unwrap().deref()) {
+                    let name = name.lock().unwrap();
+                    if let Some(struc) = STRUCTS.lock().unwrap().get(name.deref()) {
                         let len = struc.len();
+                        let i = STRUCT_ID.fetch_add(1, Ordering::Relaxed);
                         *storage.lock().unwrap() = if len == 1 {
-                            StructStorage::OneVar(ccase!(
-                                camel,
-                                format!("{}_{}", name.lock().unwrap(), n)
-                            ))
+                            let v = struc.iter().next().unwrap().0;
+                            StructStorage::OneVar(ccase!(camel, format!("{name}{i}_{v}")))
                         } else {
                             StructStorage::ManyVars(
                                 struc
                                     .iter()
-                                    .enumerate()
-                                    .map(|(i, _)| {
-                                        ccase!(
-                                            camel,
-                                            format!("{}_{}{}", name.lock().unwrap(), n, i)
-                                        )
-                                    })
+                                    .map(|v| ccase!(camel, format!("{name}{i}_{}", v.0)))
                                     .collect(),
                             )
                         };
                     } else {
-                        errs.push(format!("Struct `{}` does not exist", name.lock().unwrap()))
+                        errs.push(format!("Struct `{}` does not exist", name))
                     }
                 }
                 vars.insert(n.clone(), typed);
             }
-            Statement::Fn { name, body, params: paramsog } => {
+            Statement::Fn {
+                name,
+                body,
+                params: paramsog,
+            } => {
                 let params: Vec<_> = paramsog
                     .iter_mut()
                     .map(|x1| {
@@ -193,14 +192,14 @@ fn type_check(
                     name.clone(),
                     (params.iter().map(|x| x.1.clone()).collect(), typed),
                 );
-                *paramsog =paramsog
+                *paramsog = paramsog
                     .iter_mut()
                     .flat_map(|x1| {
                         if let ExprType::Struct(StructTy {
-                                                    name,
-                                                    index,
-                                                    storage,
-                                                }) = &mut x1.1
+                            name,
+                            index,
+                            storage,
+                        }) = &mut x1.1
                         {
                             let name: String = name.lock().unwrap().clone();
                             if let Some(struc) = STRUCTS.lock().unwrap().get(&name) {
@@ -212,10 +211,8 @@ fn type_check(
                                     .collect();
                                 if len == 1 {
                                     let name = format!("{}_{}", name, x1.0);
-                                    *storage.lock().unwrap() = StructStorage::OneVar(ccase!(
-                                        camel,
-                                        name.clone()
-                                    ));
+                                    *storage.lock().unwrap() =
+                                        StructStorage::OneVar(ccase!(camel, name.clone()));
                                     vec![(name, struc.iter().next().unwrap().1.clone())]
                                 } else {
                                     *storage.lock().unwrap() = StructStorage::ManyVars(
@@ -231,7 +228,10 @@ fn type_check(
                                         .iter()
                                         .enumerate()
                                         .map(|(i, (_, v))| {
-                                            (ccase!(camel, format!("{}{}_{}", name, i, x1.0)), v.clone())
+                                            (
+                                                ccase!(camel, format!("{}{}_{}", name, i, x1.0)),
+                                                v.clone(),
+                                            )
                                         })
                                         .collect()
                                 }

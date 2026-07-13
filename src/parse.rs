@@ -107,6 +107,7 @@ pub enum Expr {
     Call(String, Vec<Expr>),
     Abs(Box<Expr>),
     Dot(Dot),
+    Struct(String, Vec<(String, Expr)>),
 }
 
 #[derive(Debug, Clone)]

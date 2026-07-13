@@ -1,16 +1,13 @@
 use crate::parse::{Comparison, Dot, Expr, Statement};
-use crate::type_check::{BUILTIN_FUNCS, ExprType, STRUCTS, StructStorage};
+use crate::type_check::{BUILTIN_FUNCS, ExprType, StructStorage};
+use convert_case::ccase;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicI32, Ordering};
-use convert_case::ccase;
 
 static FOR_ID: AtomicI32 = AtomicI32::new(0);
-
-/// This really should be passed as an argument, but there's already so many on `tr`...
-static ERRS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+pub static STRUCT_ID: AtomicI32 = AtomicI32::new(0);
 
 #[derive(Debug)]
 pub struct DesmoExpr {
@@ -40,11 +37,11 @@ pub fn transpile_many(
                 });
                 id += 1;
             }
-            Statement::Def(n, e) => {
+            Statement::Def(n_og, mut e) => {
                 let n = {
-                    let replaced = n.replace('_', "");
+                    let replaced = n_og.replace('_', "");
                     let replaced = if let Some((fn_name, _params, rename_only)) = fn_name
-                        && (rename_only.contains(&n) || rename_only.is_empty())
+                        && (rename_only.contains(&n_og) || rename_only.is_empty())
                     {
                         format!("{fn_name}{replaced}")
                     } else {
@@ -58,14 +55,24 @@ pub fn transpile_many(
                     };
                     format!("{first}{rest}")
                 };
-                let val = format!("{}={}", n, tr(&e, fn_name, &mut exprs, &mut (id, fold_id)));
-                exprs.push(DesmoExpr {
-                    id,
-                    folder_id: fold_id,
-                    content: val,
-                    other: hm(),
-                });
-                id += 1;
+                if let Expr::Struct(_s_name, fields) = &mut e {
+                    // Defined by `tr`, so we just have to call that. No need to add more
+                    // `DesmoExprs` to the list.
+                    fields.iter_mut().for_each(|field| {
+                        *field = (ccase!(camel, format!("{}_{}", dbg!(&n_og), dbg!(&field.0))), field.1.clone())
+                    });
+                    tr(&e, fn_name, &mut exprs, &mut (id, fold_id));
+                    id += 1
+                } else {
+                    let val = format!("{}={}", n, tr(&e, fn_name, &mut exprs, &mut (id, fold_id)));
+                    exprs.push(DesmoExpr {
+                        id,
+                        folder_id: fold_id,
+                        content: val,
+                        other: hm(),
+                    });
+                    id += 1;
+                }
             }
             Statement::Fn {
                 ref name,
@@ -376,14 +383,33 @@ fn tr(
             y,
         }) => match struct_storage.storage.lock().unwrap().deref() {
             StructStorage::Unknown => unreachable!(),
-            StructStorage::OneVar(v) => {
-                ident_ify(&ccase!(camel, format!("{}_{}", struct_storage.name.lock().unwrap(), y)))
-            }
+            StructStorage::OneVar(_v) => ident_ify(&ccase!(
+                camel,
+                format!("{}_{}", struct_storage.name.lock().unwrap(), y)
+            )),
             StructStorage::ManyVars(vs) => {
                 let v = vs[struct_storage.index.lock().unwrap()[y]].clone();
                 ident_ify(&ccase!(camel, v))
             }
         },
+        Expr::Struct(s_name, fields) => {
+            let mut args = vec![];
+            let i = STRUCT_ID.fetch_add(1, Ordering::Relaxed);
+            for (n, v) in fields.iter() {
+                let v = tr(v, fn_name, exprs, ids);
+                let new = ident_ify(&ccase!(camel, format!("{s_name}{i}_{n}")));
+                args.push(new.clone());
+
+                exprs.push(DesmoExpr {
+                    id: ids.0,
+                    folder_id: ids.1,
+                    content: format!("{}={}", new, v),
+                    other: Default::default(),
+                });
+                ids.0 += 1;
+            }
+            args.join(",")
+        }
     }
 }
 

@@ -48,26 +48,38 @@ Atom: Expr = {
     #[precedence(level="1")]
     <A>,
     #[precedence(level="2")]
+    <StructInst>,
+    #[precedence(level="3")]
     <x:Var> "." <y:Var> => Expr::Dot(Dot { x, y, struct_storage: StructTy { name: Arc::new(Mutex::new("".to_string())), index: Arc::new(Mutex::new(HashMap::new())), storage: Arc::new(Mutex::new(StructStorage::Unknown)) }}),
-    #[precedence(level="3")] #[assoc(side="right")]
+    #[precedence(level="4")] #[assoc(side="right")]
     <a:Atom> "^" <b:Atom> => Expr::Exp(bx(a), bx(b)),
-    #[precedence(level="4")] #[assoc(side="left")]
+    #[precedence(level="5")] #[assoc(side="left")]
     <a:Atom> "*" <b:Atom> => Expr::Mul(bx(a), bx(b)),
-    #[precedence(level="4")] #[assoc(side="left")]
+    #[precedence(level="5")] #[assoc(side="left")]
     <a:Atom> "/" <b:Atom> => Expr::Div(bx(a), bx(b)),
-    #[precedence(level="5")] #[assoc(side="right")]
+    #[precedence(level="6")] #[assoc(side="right")]
     "-" <a:Atom> => Expr::Neg(bx(a)),
-    #[precedence(level="5")] #[assoc(side="right")]
+    #[precedence(level="6")] #[assoc(side="right")]
     "+" <Atom>,
-    #[precedence(level="6")] #[assoc(side="left")]
+    #[precedence(level="7")] #[assoc(side="left")]
     <a:Atom> "+" <b:Atom> => Expr::Add(bx(a), bx(b)),
-    #[precedence(level="6")] #[assoc(side="left")]
+    #[precedence(level="7")] #[assoc(side="left")]
     <a:Atom> "-" <b:Atom> => Expr::Sub(bx(a), bx(b)),
-    #[precedence(level="7")]
+    #[precedence(level="8")]
     <If>,
-    #[precedence(level="7")]
+    #[precedence(level="8")]
     <For>
 }
+
+StructInst: Expr = {
+    "new" <n:Var> "{" "}" => Expr::Struct(n, vec![]),
+    "new" <n:Var> "{" <l:StructInstIn> "}" => Expr::Struct(n, l),
+}
+
+StructInstIn: Vec<(String, Expr)> = {
+    <mut l:StructInstIn> "," <n:Var> ":"  <a:Atom> => {l.push((n, a)); l},
+    <n:Var> ":" <a:Atom> => {let mut l = Vec::new(); l.push((n, a)); l}
+};
 
 For: Expr = {
     "foreach" <ident:Var> "in" <over:Boxed<Atom>> "{" <body:FnBody> "}" => Expr::For { over, ident, body } };

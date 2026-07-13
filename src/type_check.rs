@@ -1,5 +1,5 @@
 use crate::parse::{Dot, Elif, Expr, Statement};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::mem::discriminant;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock, Mutex};
@@ -377,6 +377,47 @@ pub fn check(
                     x,
                     y
                 ));
+                ExprType::Conflict
+            }
+        }
+        Expr::Struct(s_name, fields) => {
+            if let Some(struc) = STRUCTS.lock().unwrap().get(&s_name) {
+                let actual = struc.keys().collect::<HashSet<_>>();
+                let found = fields
+                    .iter()
+                    .cloned()
+                    .unzip::<String, Expr, HashSet<String>, Vec<Expr>>()
+                    .0;
+                let found = found.iter().by_ref().collect::<HashSet<&String>>();
+                let diff = actual
+                    .symmetric_difference(&found)
+                    .cloned()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if !diff.is_empty() {
+                    let diff = diff.join("`, `");
+                    errs.push(format!("Struct missing fields `{diff}`"));
+                    ExprType::Conflict
+                } else {
+                    let storage;
+                    let index;
+                    if found.len() == 1 {
+                        // Fill this in `::transpile::tr`
+                        storage = StructStorage::OneVar("".to_string());
+                        index = HashMap::new();
+                    } else {
+                        // Fill this in `::transpile::tr`
+                        storage = StructStorage::ManyVars(vec![]);
+                        index = HashMap::new();
+                    };
+                    ExprType::Struct(StructTy {
+                        name: Arc::new(Mutex::new(s_name)),
+                        index: Arc::new(Mutex::new(index)),
+                        storage: Arc::new(Mutex::new(storage)),
+                    })
+                }
+            } else {
+                errs.push(format!("Struct `{s_name}` does not exist"));
                 ExprType::Conflict
             }
         }
