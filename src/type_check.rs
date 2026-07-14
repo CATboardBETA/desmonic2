@@ -1,8 +1,10 @@
 use crate::parse::{Dot, Elif, Expr, Statement};
 use std::collections::{HashMap, HashSet};
+use std::fmt::{Debug, Formatter};
 use std::mem::discriminant;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock, Mutex};
+use crate::type_check;
 
 pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, String)>> =
     LazyLock::new(|| {
@@ -48,7 +50,7 @@ macro_rules! naction {
     }};
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ExprType {
     Conflict,
 
@@ -65,6 +67,28 @@ pub enum ExprType {
     /// own variable.
     Struct(StructTy),
     StructList(StructTy),
+}
+
+impl Debug for ExprType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ExprType::Conflict => "Type Conflict".to_string(),
+                ExprType::Num => "Num".to_string(),
+                ExprType::Action => "Action".to_string(),
+                ExprType::Point => "Point".to_string(),
+                ExprType::Point3 => "Point3".to_string(),
+                ExprType::NumList => "L<Num>".to_string(),
+                ExprType::PointList => "L<Point>".to_string(),
+                ExprType::Point3List => "L<Point3>".to_string(),
+                ExprType::Struct(StructTy { name, .. }) => name.lock().unwrap().clone(),
+                ExprType::StructList(StructTy { name, .. }) =>
+                    format!("L<{}>", name.lock().unwrap()),
+            }
+        )
+    }
 }
 
 impl PartialEq for ExprType {
@@ -420,6 +444,29 @@ pub fn check(
                 errs.push(format!("Struct `{s_name}` does not exist"));
                 ExprType::Conflict
             }
+        }
+        Expr::Action(acts) => {
+            // Desmos doesn't actually require that actions maintain type, but it'll simplify
+            // things a lot for me.
+            let mut it = ExprType::Action;
+            for act in acts {
+                if let Some(var_ty) = vars.get(&act.0).cloned() {
+                    let typed = type_check::check(act.1.clone(), vars, funcs, errs);
+                    if typed != var_ty {
+                        errs.push(format!(
+                            "Action on `{}` expected ty `{:?}`, got ty `{:?}`",
+                            act.0, var_ty, typed
+                        ));
+                        it = ExprType::Conflict;
+                    }
+                    if typed == ExprType::Action {
+                        errs.push("Cannot act on an action".to_string())
+                    }
+                } else {
+                    errs.push(format!("Cannot act on nonexistent variable `{}`", act.0))
+                }
+            }
+            it
         }
     }
 }

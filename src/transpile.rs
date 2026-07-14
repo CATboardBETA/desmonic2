@@ -59,7 +59,10 @@ pub fn transpile_many(
                     // Defined by `tr`, so we just have to call that. No need to add more
                     // `DesmoExprs` to the list.
                     fields.iter_mut().for_each(|field| {
-                        *field = (ccase!(camel, format!("{}_{}", dbg!(&n_og), dbg!(&field.0))), field.1.clone())
+                        *field = (
+                            ccase!(camel, format!("{}_{}", dbg!(&n_og), dbg!(&field.0))),
+                            field.1.clone(),
+                        )
                     });
                     tr(&e, fn_name, &mut exprs, &mut (id, fold_id));
                     id += 1
@@ -143,10 +146,12 @@ pub fn transpile_many(
                     folder_id: Some(f_id),
                     content: format!("{}\\left({}\\right)={}", name_fmt, params_fmt, val),
                     other,
-                })
+                });
+                id += 1;
             }
             Statement::Styled { stmts, style } => {
                 let new = transpile_many(stmts, fn_name, id, fold_id);
+                let len = new.len();
                 exprs.extend(new.into_iter().map(|mut x| {
                     x.other.extend(
                         style
@@ -154,7 +159,8 @@ pub fn transpile_many(
                             .map(|(k, v)| (k.clone(), Value::String(v.clone()))),
                     );
                     x
-                }))
+                }));
+                id += len as i32;
             }
             Statement::Implicit(ref lhs, cmp, ref rhs) => {
                 let lhs = tr(lhs, fn_name, &mut exprs, &mut (id, fold_id));
@@ -165,11 +171,12 @@ pub fn transpile_many(
                     folder_id: fold_id,
                     content: format!("{}{}{}", lhs, cmp, rhs),
                     other: hm(),
-                })
+                });
+                id += 1
             }
-            Statement::Struct(_, _) => {
-                // Struct definitions don't transpile into anything. They are only used by the Desmonic
-                // transpiler.
+            Statement::Struct(..) => {
+                // Struct definitions don't transpile into anything. They are only used by the
+                // Desmonic transpiler.
             }
         }
     }
@@ -409,6 +416,17 @@ fn tr(
                 ids.0 += 1;
             }
             args.join(",")
+        }
+        Expr::Action(acts) => {
+            acts.into_iter().map(|(n, expr)| {
+                if let Expr::Struct(s_name, fields) = expr {
+                    todo!()
+                } else {
+                    let n = ident_ify(&n);
+                    let expr = tr(&expr, fn_name,exprs, ids);
+                    format!("{n}\\to {expr}")
+                }
+            }).collect::<Vec<_>>().join(",")
         }
     }
 }

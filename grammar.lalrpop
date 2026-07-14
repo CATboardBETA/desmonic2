@@ -18,6 +18,12 @@ Stmt: Statement = {
     <Struct>,
 }
 
+
+ActionIn: Vec<(String, Expr)> = {
+    <mut l:ActionIn> ";" <v:Var> "->" <a:AtomInner> => { l.push((v,a)); l },
+    <v:Var> "->" <a:AtomInner> => vec![(v, a)],
+};
+
 Styled: Statement = {
     "style" "{" <s:Stmt*> "}" "as" <l:StyleList> => Statement::Styled { stmts: s, style: l }
 };
@@ -44,7 +50,13 @@ FnBodyIn: Vec<Statement> = {
     <s:StmtInFn> => { vec![s] }
 }
 
+#[inline]
 Atom: Expr = {
+    AtomInner,
+    "act" "{" <l:ActionIn> "}" => Expr::Action(l)
+}
+
+AtomInner: Expr = {
     #[precedence(level="1")]
     <A>,
     #[precedence(level="2")]
@@ -52,23 +64,23 @@ Atom: Expr = {
     #[precedence(level="3")]
     <x:Var> "." <y:Var> => Expr::Dot(Dot { x, y, struct_storage: StructTy { name: Arc::new(Mutex::new("".to_string())), index: Arc::new(Mutex::new(HashMap::new())), storage: Arc::new(Mutex::new(StructStorage::Unknown)) }}),
     #[precedence(level="4")] #[assoc(side="right")]
-    <a:Atom> "^" <b:Atom> => Expr::Exp(bx(a), bx(b)),
+    <a:AtomInner> "^" <b:AtomInner> => Expr::Exp(bx(a), bx(b)),
     #[precedence(level="5")] #[assoc(side="left")]
-    <a:Atom> "*" <b:Atom> => Expr::Mul(bx(a), bx(b)),
+    <a:AtomInner> "*" <b:AtomInner> => Expr::Mul(bx(a), bx(b)),
     #[precedence(level="5")] #[assoc(side="left")]
-    <a:Atom> "/" <b:Atom> => Expr::Div(bx(a), bx(b)),
+    <a:AtomInner> "/" <b:AtomInner> => Expr::Div(bx(a), bx(b)),
     #[precedence(level="6")] #[assoc(side="right")]
-    "-" <a:Atom> => Expr::Neg(bx(a)),
+    "-" <a:AtomInner> => Expr::Neg(bx(a)),
     #[precedence(level="6")] #[assoc(side="right")]
-    "+" <Atom>,
+    "+" <AtomInner>,
     #[precedence(level="7")] #[assoc(side="left")]
-    <a:Atom> "+" <b:Atom> => Expr::Add(bx(a), bx(b)),
+    <a:AtomInner> "+" <b:AtomInner> => Expr::Add(bx(a), bx(b)),
     #[precedence(level="7")] #[assoc(side="left")]
-    <a:Atom> "-" <b:Atom> => Expr::Sub(bx(a), bx(b)),
+    <a:AtomInner> "-" <b:AtomInner> => Expr::Sub(bx(a), bx(b)),
     #[precedence(level="8")]
     <If>,
     #[precedence(level="8")]
-    <For>
+    <For>,
 }
 
 StructInst: Expr = {
