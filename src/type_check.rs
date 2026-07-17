@@ -1,10 +1,10 @@
 use crate::parse::{Dot, Elif, Expr, Statement};
+use crate::type_check;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::mem::discriminant;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock, Mutex};
-use crate::type_check;
 
 pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, String)>> =
     LazyLock::new(|| {
@@ -16,23 +16,28 @@ pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, Str
     }
         let mut h = HashMap::new();
         i! { h,
-            "mod",      Num Num, Num,       "mod";
-            "modl",     NumList Num, NumList, "mod";
-            "modl2",    Num NumList, NumList, "mod";
-            "modll",    NumList NumList, NumList, "mod";
-            "sgn",      Num, Num,           "sgn";
-            "sign",     Num, Num,           "sgn";
-            "signum",   Num, Num,           "sgn";
-            "sgnl",     NumList, NumList,   "sgn";
-            "signl",    NumList, NumList,   "sgn";
-            "signuml",  NumList, NumList,   "sgn";
-            "cos",      Num, Num,           "cos";
-            "cosl",     NumList, NumList,   "cos";
-            "abs",      Num, Num,           "abs";
-            "absl",     NumList, NumList,   "abs";
-            "abspl",    PointList, Num,     "abs";
-            "min",      NumList, Num,       "min";
-            "max",      NumList, Num,       "max"
+            "mod", Num Num, Num, "mod";
+            "modl", NumList Num, NumList, "mod";
+            "modl2", Num NumList, NumList, "mod";
+            "modll", NumList NumList, NumList, "mod";
+            "sgn", Num, Num, "sgn";
+            "sign", Num, Num, "sgn";
+            "signum", Num, Num, "sgn";
+            "sgnl", NumList, NumList, "sgn";
+            "signl", NumList, NumList, "sgn";
+            "signuml", NumList, NumList, "sgn";
+            "cos", Num, Num, "cos";
+            "cosl", NumList, NumList, "cos";
+            "abs", Num, Num, "abs";
+            "absl", NumList, NumList, "abs";
+            "abspl", PointList, Num, "abs";
+            "min", NumList, Num, "min";
+            "max", NumList, Num, "max";
+            "polygon", PointList, Conflict, "polygon";
+            "distance", Point Point, Num, "distance";
+            "total", NumList, Num, "total";
+            "random", , Num, "random";
+            "randomn", Num, NumList, "random"
         }
         h
     });
@@ -130,30 +135,51 @@ pub fn check(
         Expr::Num(_) => Et::Num,
         Expr::Neg(a) => {
             let a = check(*a, vars, funcs, errs);
-            naction!(errs; a; a);
+            match a {
+                ExprType::Conflict => ExprType::Conflict,
+                ExprType::Num => ExprType::Num,
+                ExprType::Action => ExprType::Conflict,
+                ExprType::Point => ExprType::Point,
+                ExprType::Point3 => ExprType::Point3,
+                ExprType::NumList => ExprType::NumList,
+                ExprType::PointList => ExprType::PointList,
+                ExprType::Point3List => ExprType::Point3List,
+                ExprType::Struct(_) => ExprType::Conflict,
+                ExprType::StructList(_) => ExprType::Conflict,
+            }
         }
         Expr::Add(a, b) => {
             let a = check(*a, vars, funcs, errs);
             let b = check(*b, vars, funcs, errs);
-            naction!(errs; if a == b { a } else { Et::Conflict }; a, b);
+            if a == b && a == ExprType::Num {
+                ExprType::Num
+            } else if a == ExprType::NumList || b == ExprType::NumList {
+                ExprType::NumList
+            } else {
+                ExprType::Conflict
+            }
         }
         Expr::Sub(a, b) => {
             let a = check(*a, vars, funcs, errs);
             let b = check(*b, vars, funcs, errs);
-            naction!(errs; if a == b { a } else { Et::Conflict }; a, b)
+            if a == b && a == ExprType::Num {
+                ExprType::Num
+            } else if a == ExprType::NumList || b == ExprType::NumList {
+                ExprType::NumList
+            } else {
+                ExprType::Conflict
+            }
         }
         Expr::Mul(a, b) => {
             let a = check(*a, vars, funcs, errs);
             let b = check(*b, vars, funcs, errs);
-            naction!(errs; if a == b { a } else {
-                return if a == Et::Num {
-                    b
-                } else if b == Et::Num{
-                    a
-                } else {
-                    Et::Conflict
-                }
-            }; a, b)
+            if a == b && a == ExprType::Num {
+                ExprType::Num
+            } else if a == ExprType::NumList || b == ExprType::NumList {
+                ExprType::NumList
+            } else {
+                ExprType::Conflict
+            }
         }
         Expr::Div(a, b) => {
             let a = check(*a, vars, funcs, errs);
@@ -336,21 +362,25 @@ pub fn check(
         }
         Expr::For { over, ident, body } => {
             let over_ty = check(*over, vars, funcs, errs);
-            match over_ty {
-                ExprType::Conflict => errs.push("Cannot iterate over a type conflict".to_string()),
+            let over_ty = match over_ty {
+                ExprType::Conflict => {
+                    errs.push("Cannot iterate over a type conflict".to_string());
+                    ExprType::Conflict
+                }
                 ExprType::Num
                 | ExprType::Action
                 | ExprType::Point
                 | ExprType::Point3
                 | ExprType::Struct(_) => {
-                    errs.push(format!("Cannot iterate over type `{over_ty:?}`"))
+                    errs.push(format!("Cannot iterate over type `{over_ty:?}`"));
+                    ExprType::Conflict
                 }
-                ExprType::NumList
-                | ExprType::PointList
-                | ExprType::Point3List
-                | ExprType::StructList(_) => {}
-            }
-            let mut vars = HashMap::new();
+                ExprType::NumList => ExprType::Num,
+                ExprType::PointList => ExprType::Point,
+                ExprType::Point3List => ExprType::Point3,
+                ExprType::StructList(s) => ExprType::Struct(s),
+            };
+            let mut vars = vars.clone();
             vars.insert(ident, over_ty);
             let (rest, last) = body.split_at(body.len() - 1);
             for x in rest {
@@ -363,7 +393,21 @@ pub fn check(
             let Statement::Expr(last) = last[0].clone() else {
                 unreachable!()
             };
-            check(last, &mut vars, funcs, errs)
+            match check(last, &mut vars, funcs, errs) {
+                ExprType::Conflict => ExprType::Conflict,
+                ExprType::Num => ExprType::NumList,
+                ExprType::Action => ExprType::Conflict,
+                ExprType::Point => ExprType::PointList,
+                ExprType::Point3 => ExprType::Point3List,
+                ExprType::Struct(s) => ExprType::StructList(s),
+                ExprType::Point3List
+                | ExprType::NumList
+                | ExprType::PointList
+                | ExprType::StructList(_) => {
+                    errs.push("Cannot store a list in a list".to_string());
+                    ExprType::Conflict
+                }
+            }
         }
         Expr::Abs(e) => {
             let inner_ty = check(*e, vars, funcs, errs);
@@ -467,6 +511,34 @@ pub fn check(
                 }
             }
             it
+        }
+        Expr::ListR(a, b) => {
+            let a_ty = check(*a, vars, funcs, errs);
+            let b_ty = check(*b, vars, funcs, errs);
+            if a_ty == ExprType::Num && b_ty == ExprType::Num {
+                ExprType::NumList
+            } else {
+                errs.push("Can only have a range of two numbers".to_string());
+                ExprType::Conflict
+            }
+        }
+        Expr::Index(n, i) => {
+            let n_ty = check(*n, vars, funcs, errs);
+            match n_ty {
+                ExprType::Conflict => ExprType::Conflict,
+                ExprType::Num
+                | ExprType::Action
+                | ExprType::Point
+                | ExprType::Point3
+                | ExprType::Struct(_) => {
+                    errs.push("Cannot index into non-list".to_string());
+                    ExprType::Conflict
+                }
+                ExprType::NumList => ExprType::Num,
+                ExprType::PointList => ExprType::Point,
+                ExprType::Point3List => ExprType::Point3,
+                ExprType::StructList(s) => ExprType::Struct(s),
+            }
         }
     }
 }

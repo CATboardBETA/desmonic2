@@ -19,7 +19,11 @@ pub struct DesmoExpr {
 
 pub fn transpile_many(
     stmts: Vec<Statement>,
-    fn_name: Option<(&String, &Vec<(String, ExprType)>, &Vec<String>)>,
+    fn_name: Option<(
+        &String,
+        &Vec<(String, ExprType)>,
+        &Option<HashMap<String, String>>,
+    )>,
     init_id: i32,
     fold_id: Option<i32>,
 ) -> Vec<DesmoExpr> {
@@ -41,7 +45,7 @@ pub fn transpile_many(
                 let n = {
                     let replaced = n_og.replace('_', "");
                     let replaced = if let Some((fn_name, _params, rename_only)) = fn_name
-                        && (rename_only.contains(&n_og) || rename_only.is_empty())
+                        && rename_only.clone().is_some_and(|x| x.contains_key(&n_og))
                     {
                         format!("{fn_name}{replaced}")
                     } else {
@@ -99,7 +103,7 @@ pub fn transpile_many(
                 other.insert("hidden".to_string(), Value::Bool(true));
 
                 exprs.append(
-                    &mut transpile_many(body.into(), Some((name, params, &vec![])), id, Some(f_id))
+                    &mut transpile_many(body.into(), Some((name, params, &None)), id, Some(f_id))
                         .into_iter()
                         .map(|mut e| {
                             e.other = other.clone();
@@ -137,7 +141,7 @@ pub fn transpile_many(
                 };
                 let val = tr(
                     e,
-                    Some((name, params, &vec![])),
+                    Some((name, params, &None)),
                     &mut exprs,
                     &mut (id, fold_id),
                 );
@@ -185,7 +189,11 @@ pub fn transpile_many(
 
 fn tr(
     e: &Expr,
-    fn_name: Option<(&String, &Vec<(String, ExprType)>, &Vec<String>)>,
+    fn_name: Option<(
+        &String,
+        &Vec<(String, ExprType)>,
+        &Option<HashMap<String, String>>,
+    )>,
     exprs: &mut Vec<DesmoExpr>,
     ids: &mut (i32, Option<i32>),
 ) -> String {
@@ -221,7 +229,7 @@ fn tr(
             let replaced = s.replace('_', "");
             let replaced = if let Some((fn_name, params, rename_only)) = fn_name
                 && params.iter().all(|x| x.0 != *s)
-                && (rename_only.contains(s) || rename_only.is_empty())
+                && rename_only.clone().is_some_and(|x| x.contains_key(s))
             {
                 format!("{fn_name}{replaced}")
             } else {
@@ -328,26 +336,33 @@ fn tr(
                 unreachable!()
             };
             // incredible var names, I know
-            let fn_name_pt3 = rest
+            let mut fn_name_pt3 = rest
                 .iter()
                 .map(|def| {
                     let Statement::Def(n, _e) = def else {
                         unreachable!()
                     };
-                    n.clone()
+                    (
+                        n.clone(),
+                        if let Some(fn_name) = fn_name {
+                            format!("{}for{}{}", fn_name.0, FOR_ID.load(Ordering::Relaxed), n)
+                        } else {
+                            format!("for{}{}", FOR_ID.load(Ordering::Relaxed), n)
+                        },
+                    )
                 })
-                .collect::<Vec<String>>();
+                .collect::<HashMap<String, String>>();
             let fn_name2 = if let Some(fn_name) = fn_name {
                 (
                     &format!("{}for{}", fn_name.0, FOR_ID.load(Ordering::Relaxed)),
                     fn_name.1,
-                    &fn_name_pt3,
+                    &Some(fn_name_pt3.clone()),
                 )
             } else {
                 (
                     &format!("for{}", FOR_ID.load(Ordering::Relaxed)),
                     &vec![],
-                    &fn_name_pt3,
+                    &Some(fn_name_pt3.clone()),
                 )
             };
             let mut additional = rest
@@ -417,16 +432,28 @@ fn tr(
             }
             args.join(",")
         }
-        Expr::Action(acts) => {
-            acts.into_iter().map(|(n, expr)| {
+        Expr::Action(acts) => acts
+            .iter()
+            .map(|(n, expr)| {
                 if let Expr::Struct(s_name, fields) = expr {
                     todo!()
                 } else {
-                    let n = ident_ify(&n);
-                    let expr = tr(&expr, fn_name,exprs, ids);
+                    let n = ident_ify(n);
+                    let expr = tr(expr, fn_name, exprs, ids);
                     format!("{n}\\to {expr}")
                 }
-            }).collect::<Vec<_>>().join(",")
+            })
+            .collect::<Vec<_>>()
+            .join(","),
+        Expr::ListR(a, b) => {
+            let a = tr(a, fn_name, exprs, ids);
+            let b = tr(b, fn_name, exprs, ids);
+            format!("\\left[{a}...{b}\\right]")
+        }
+        Expr::Index(n, l) => {
+            let n = tr(n, fn_name, exprs, ids);
+            let l = tr(l, fn_name, exprs, ids);
+            format!("{n}\\left[{l}\\right]")
         }
     }
 }

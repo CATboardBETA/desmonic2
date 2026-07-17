@@ -81,6 +81,8 @@ AtomInner: Expr = {
     <If>,
     #[precedence(level="8")]
     <For>,
+    #[precedence(level="9")]
+    <v:Boxed<AtomInner>> "[" <a:Boxed<AtomInner>> "]" => Expr::Index(v,a),
 }
 
 StructInst: Expr = {
@@ -137,6 +139,7 @@ Point: Expr = {
 List: Expr = {
     "[" <l:ListIn> "]" => Expr::List(l),
     "[" "]" => Expr::List(vec![]),
+    "[" <a:Boxed<Atom>> "~" <b:Boxed<Atom>> "]" => Expr::ListR(a,b)
 };
 
 ListIn: Vec<Expr> = {
@@ -192,3 +195,11 @@ Str: String = <s:r#""(?:[^"\\]*(?:\\.)?)*""#> => s.strip_prefix('"').unwrap_or(s
 Boxed<T>: Box<T> = {
     <mut x:(<T>)> => bx(x)
 };
+
+match {
+    r"\s*" => { }, // The default whitespace skipping is disabled if an `ignore pattern` is specified
+    r"//[^\n\r]*[\n\r]*" => { }, // Skip `// comments`
+    r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { },  // Skip `/* comments */`
+} else {
+    _
+}

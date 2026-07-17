@@ -1,7 +1,6 @@
 #![allow(clippy::type_complexity)]
 use crate::parse::Statement;
 use crate::transpile::{STRUCT_ID, transpile_many};
-use crate::type_check::ExprType::{Num, NumList};
 use crate::type_check::{ExprType, STRUCTS, StructStorage, StructTy};
 use clap::{Parser, Subcommand, builder::Styles};
 use convert_case::ccase;
@@ -249,12 +248,16 @@ fn type_check(
                 type_check(stmts, vars, funcs, errs);
             }
             Statement::Implicit(e1, _cmp, e2) => {
-                let e1 = type_check::check(e1.clone(), vars, funcs, errs);
-                let e2 = type_check::check(e2.clone(), vars, funcs, errs);
-                if e1 != e2 {
+                use ExprType::{Num, NumList};
+                let mut vars = vars.clone();
+                vars.insert("x".to_string(), Num);
+                vars.insert("y".to_string(), Num);
+                let e1 = type_check::check(e1.clone(), &mut vars, funcs, errs);
+                let e2 = type_check::check(e2.clone(), &mut vars, funcs, errs);
+                if (&e1) != (&e2) {
                     errs.push("Implicit should have equivalent types on each side".to_string());
                 }
-                if e1 != Num || e1 != NumList || e2 != Num || e2 != NumList {
+                if !(e1 == Num || e1 == NumList || e2 == Num || e2 == NumList) {
                     errs.push("Implicit may only be of numbers or lists of numbers".to_string());
                 }
             }

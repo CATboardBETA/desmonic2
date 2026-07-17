@@ -73,8 +73,8 @@ impl Display for ComparisonOp {
                 ComparisonOp::Ne => todo!(),
                 ComparisonOp::Gt => ">",
                 ComparisonOp::Lt => "<",
-                ComparisonOp::Ge => "\\ge",
-                ComparisonOp::Le => "\\le",
+                ComparisonOp::Ge => "\\ge ",
+                ComparisonOp::Le => "\\le ",
             }
         )
     }
@@ -102,6 +102,7 @@ pub enum Expr {
         body: Vec<Statement>,
     },
     List(Vec<Expr>),
+    ListR(Box<Expr>, Box<Expr>),
     Point(Box<Expr>, Box<Expr>),
     Point3(Box<Expr>, Box<Expr>, Box<Expr>),
     Call(String, Vec<Expr>),
@@ -109,6 +110,7 @@ pub enum Expr {
     Dot(Dot),
     Struct(String, Vec<(String, Expr)>),
     Action(Vec<(String, Expr)>),
+    Index(Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug, Clone)]
