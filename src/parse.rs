@@ -151,7 +151,7 @@ pub enum Statement {
     },
     Styled {
         stmts: Vec<Statement>,
-        style: HashMap<String, String>,
+        style: HashMap<Vec<String>, String>,
     },
     Implicit(Expr, ComparisonOp, Expr),
     Struct(String, HashMap<String, ExprType>),

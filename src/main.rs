@@ -81,10 +81,9 @@ fn main() {
                 eprintln!("\t{err}")
             }
         }
-
         println!(
             "\nState:\n{}",
-            serde_json::to_string(&GraphState::from_vec(transpiled)).unwrap()
+            serde_json::to_value(GraphState::from_vec(transpiled)).unwrap()
         )
     }
 }
@@ -254,7 +253,7 @@ fn type_check(
                 vars.insert("y".to_string(), Num);
                 let e1 = type_check::check(e1.clone(), &mut vars, funcs, errs);
                 let e2 = type_check::check(e2.clone(), &mut vars, funcs, errs);
-                if (&e1) != (&e2) {
+                if e1 != e2 {
                     errs.push("Implicit should have equivalent types on each side".to_string());
                 }
                 if !(e1 == Num || e1 == NumList || e2 == Num || e2 == NumList) {

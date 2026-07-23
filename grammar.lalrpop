@@ -28,15 +28,21 @@ Styled: Statement = {
     "style" "{" <s:Stmt*> "}" "as" <l:StyleList> => Statement::Styled { stmts: s, style: l }
 };
 
-StyleList: HashMap<String, String> = {
+StyleList: HashMap<Vec<String>, String> = {
     "{" "}" => HashMap::new(),
     "{" <StyleListIn> "}",
 };
 
-StyleListIn: HashMap<String, String> = {
-    <mut l:StyleListIn> "," <k:Var> ":" <v:Str> => {l.insert(k, v); l},
-    <k:Var> ":" <v:Str> => { let mut l = HashMap::new(); l.insert(k,v); l }
+StyleListIn: HashMap<Vec<String>, String> = {
+    <mut l:StyleListIn> "," <k:DotVar> ":" <v:Str> => {l.insert(k, v); l},
+    <k:DotVar> ":" <v:Str> => { let mut l = HashMap::new(); l.insert(k,v); l }
 };
+
+
+DotVar: Vec<String> = {
+    <mut l:DotVar> "." <v:Var> => {l.push(v); l},
+    <v:Var> => vec![v]
+}
 
 StmtInFn: Statement = "let" <v:Var> "=" <a:Atom> ";" => Statement::Def(v, a);
 

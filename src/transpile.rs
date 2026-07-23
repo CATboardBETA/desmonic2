@@ -1,5 +1,5 @@
 use crate::parse::{Comparison, Dot, Expr, Statement};
-use crate::type_check::{BUILTIN_FUNCS, ExprType, StructStorage};
+use crate::type_check::{ExprType, StructStorage, BUILTIN_FUNCS};
 use convert_case::ccase;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -157,11 +157,37 @@ pub fn transpile_many(
                 let new = transpile_many(stmts, fn_name, id, fold_id);
                 let len = new.len();
                 exprs.extend(new.into_iter().map(|mut x| {
-                    x.other.extend(
-                        style
-                            .iter()
-                            .map(|(k, v)| (k.clone(), Value::String(v.clone()))),
-                    );
+                    // pretty sure this only works for one level of nesting but whatever
+                    x.other.extend({
+                        let mut new = hm();
+                        let mut nested = hm();
+                        for (k, v) in style.iter() {
+                            let v = v.replace("\\\\", "\\");
+                            if k.len() > 1 {
+                                for x in k[1..].iter() {
+                                    nested.insert(
+                                        x.clone(),
+                                        (k[0].clone(), Value::String(v.clone())),
+                                    );
+                                }
+                            } else {
+                                new.insert(k[0].clone(), Value::String(v.clone()));
+                            }
+                        }
+                        let mut objs: HashMap<String, HashMap<String, Value>> = hm();
+                        for nest in nested {
+                            #[allow(clippy::map_entry)]
+                            if objs.contains_key(&nest.1.0) {
+                                objs.get_mut(&nest.1.0).unwrap().insert(nest.0, nest.1.1);
+                            } else {
+                                let mut it = hm();
+                                it.insert(nest.0, nest.1.1);
+                                objs.insert(nest.1.0, it);
+                            }
+                        }
+                        new.extend(dbg!(objs).into_iter().map(|(k, v)| (k, serde_json::to_value(v).unwrap())));
+                        new
+                    });
                     x
                 }));
                 id += len as i32;
@@ -336,7 +362,7 @@ fn tr(
                 unreachable!()
             };
             // incredible var names, I know
-            let mut fn_name_pt3 = rest
+            let fn_name_pt3 = rest
                 .iter()
                 .map(|def| {
                     let Statement::Def(n, _e) = def else {

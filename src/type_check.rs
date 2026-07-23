@@ -1,5 +1,4 @@
 use crate::parse::{Dot, Elif, Expr, Statement};
-use crate::type_check;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::mem::discriminant;
@@ -495,7 +494,7 @@ pub fn check(
             let mut it = ExprType::Action;
             for act in acts {
                 if let Some(var_ty) = vars.get(&act.0).cloned() {
-                    let typed = type_check::check(act.1.clone(), vars, funcs, errs);
+                    let typed = check(act.1.clone(), vars, funcs, errs);
                     if typed != var_ty {
                         errs.push(format!(
                             "Action on `{}` expected ty `{:?}`, got ty `{:?}`",
