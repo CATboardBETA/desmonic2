@@ -102,7 +102,12 @@ StructInstIn: Vec<(String, Expr)> = {
 };
 
 For: Expr = {
-    "foreach" <ident:Var> "in" <over:Boxed<Atom>> "{" <body:FnBody> "}" => Expr::For { over, ident, body } };
+    "foreach" <iters:ForList> "{" <body:FnBody> "}" => Expr::For { iters, body } };
+
+ForList: Vec<(String, Expr)> = {
+    <mut l:ForList> "," <i:Var> "in" <o:Atom> => {l.push((i, o)); l},
+    <i:Var> "in" <o:Atom> => vec![(i, o)]
+}
 
 If: Expr = {
     "if" <cmp:FullComp> "{" <body:Boxed<Atom>> "}" <elifs:Elif*> <elsee:Else?>  =>

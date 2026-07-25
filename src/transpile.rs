@@ -1,5 +1,5 @@
 use crate::parse::{Comparison, Dot, Expr, Statement};
-use crate::type_check::{ExprType, StructStorage, BUILTIN_FUNCS};
+use crate::type_check::{BUILTIN_FUNCS, ExprType, StructStorage};
 use convert_case::ccase;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -185,7 +185,11 @@ pub fn transpile_many(
                                 objs.insert(nest.1.0, it);
                             }
                         }
-                        new.extend(dbg!(objs).into_iter().map(|(k, v)| (k, serde_json::to_value(v).unwrap())));
+                        new.extend(
+                            dbg!(objs)
+                                .into_iter()
+                                .map(|(k, v)| (k, serde_json::to_value(v).unwrap())),
+                        );
                         new
                     });
                     x
@@ -354,7 +358,12 @@ fn tr(
                 format!("\\operatorname{{{name}}}\\left({params}\\right)")
             }
         }
-        Expr::For { over, ident, body } => {
+        Expr::For { iters, body } => {
+            let iters = iters
+                .iter()
+                .map(|(i, o)| format!("{}={}", i, tr(o, fn_name, exprs, ids)))
+                .collect::<Vec<_>>()
+                .join(",");
             let Some((last, rest)) = body.split_last() else {
                 unreachable!()
             };
@@ -418,10 +427,9 @@ fn tr(
             exprs.append(&mut additional);
             FOR_ID.fetch_add(1, Ordering::Relaxed);
             format!(
-                "\\left({}\\operatorname{{for}}{}={}\\right)",
+                "\\left({}\\operatorname{{for}}{}\\right)",
                 tr(last, Some(fn_name2), exprs, ids),
-                ident_ify(ident),
-                tr(over, fn_name, exprs, ids)
+                iters
             )
         }
         Expr::Abs(e) => format!("\\left|{}\\right|", tr(e, fn_name, exprs, ids)),

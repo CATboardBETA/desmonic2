@@ -97,8 +97,7 @@ pub enum Expr {
         elsee: Option<Box<Expr>>,
     },
     For {
-        over: Box<Expr>,
-        ident: String,
+        iters: Vec<(String, Expr)>,
         body: Vec<Statement>,
     },
     List(Vec<Expr>),

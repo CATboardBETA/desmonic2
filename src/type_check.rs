@@ -359,40 +359,42 @@ pub fn check(
             }
             func
         }
-        Expr::For { over, ident, body } => {
-            let over_ty = check(*over, vars, funcs, errs);
-            let over_ty = match over_ty {
-                ExprType::Conflict => {
-                    errs.push("Cannot iterate over a type conflict".to_string());
-                    ExprType::Conflict
-                }
-                ExprType::Num
-                | ExprType::Action
-                | ExprType::Point
-                | ExprType::Point3
-                | ExprType::Struct(_) => {
-                    errs.push(format!("Cannot iterate over type `{over_ty:?}`"));
-                    ExprType::Conflict
-                }
-                ExprType::NumList => ExprType::Num,
-                ExprType::PointList => ExprType::Point,
-                ExprType::Point3List => ExprType::Point3,
-                ExprType::StructList(s) => ExprType::Struct(s),
-            };
-            let mut vars = vars.clone();
-            vars.insert(ident, over_ty);
+        Expr::For { iters, body } => {
+            let mut vars2 = vars.clone();
+            for (ident, over) in iters {
+                let over_ty = check(over, vars, funcs, errs);
+                let over_ty = match over_ty {
+                    ExprType::Conflict => {
+                        errs.push("Cannot iterate over a type conflict".to_string());
+                        ExprType::Conflict
+                    }
+                    ExprType::Num
+                    | ExprType::Action
+                    | ExprType::Point
+                    | ExprType::Point3
+                    | ExprType::Struct(_) => {
+                        errs.push(format!("Cannot iterate over type `{over_ty:?}`"));
+                        ExprType::Conflict
+                    }
+                    ExprType::NumList => ExprType::Num,
+                    ExprType::PointList => ExprType::Point,
+                    ExprType::Point3List => ExprType::Point3,
+                    ExprType::StructList(s) => ExprType::Struct(s),
+                };
+                vars.insert(ident, over_ty);
+            }
             let (rest, last) = body.split_at(body.len() - 1);
             for x in rest {
                 let Statement::Def(n, e) = x else {
                     unreachable!()
                 };
-                let typed = check(e.clone(), &mut vars, funcs, errs);
+                let typed = check(e.clone(), &mut vars2, funcs, errs);
                 vars.insert(n.clone(), typed);
             }
             let Statement::Expr(last) = last[0].clone() else {
                 unreachable!()
             };
-            match check(last, &mut vars, funcs, errs) {
+            match check(last, &mut vars2, funcs, errs) {
                 ExprType::Conflict => ExprType::Conflict,
                 ExprType::Num => ExprType::NumList,
                 ExprType::Action => ExprType::Conflict,
@@ -521,7 +523,7 @@ pub fn check(
                 ExprType::Conflict
             }
         }
-        Expr::Index(n, i) => {
+        Expr::Index(n, _) => {
             let n_ty = check(*n, vars, funcs, errs);
             match n_ty {
                 ExprType::Conflict => ExprType::Conflict,
