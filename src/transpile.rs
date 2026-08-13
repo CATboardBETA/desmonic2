@@ -414,11 +414,13 @@ fn tr(
                     ));
                     let content = format!("{}={}", n, tr(e, fn_name, exprs, ids));
                     ids.0 += 1;
+                    let mut other = hm();
+                    other.insert("hidden".to_string(), Value::String("true".to_string()));
                     DesmoExpr {
                         id: ids.0,
                         folder_id: ids.1,
                         content,
-                        other: hm(),
+                        other,
                     }
                 })
                 .collect::<Vec<_>>();
