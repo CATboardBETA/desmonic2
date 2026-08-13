@@ -186,8 +186,7 @@ pub fn transpile_many(
                             }
                         }
                         new.extend(
-                            objs
-                                .into_iter()
+                            objs.into_iter()
                                 .map(|(k, v)| (k, serde_json::to_value(v).unwrap())),
                         );
                         new
@@ -342,8 +341,8 @@ fn tr(
                 tr(z, fn_name, exprs, ids)
             )
         }
-        Expr::Call(name, params) => {
-            let params = params
+        Expr::Call(name, params_og) => {
+            let params = params_og
                 .iter()
                 .map(|x| tr(x, fn_name, exprs, ids))
                 .collect::<Vec<_>>()
@@ -353,9 +352,18 @@ fn tr(
                 let name = ident_ify(name);
                 format!("{name}\\left({params}\\right)")
             } else {
-                let name = BUILTIN_FUNCS[name].2.clone();
                 // Builtin function
-                format!("\\operatorname{{{name}}}\\left({params}\\right)")
+                let name = BUILTIN_FUNCS[name].2.clone();
+                if name != "log" {
+                    format!("\\operatorname{{{name}}}\\left({params}\\right)")
+                } else {
+                    format!(
+                        "\\operatorname{{{}}}_{{{}}}\\left({}\\right)",
+                        name,
+                        tr(&params_og[0], fn_name, exprs, ids),
+                        tr(&params_og[1], fn_name, exprs, ids)
+                    )
+                }
             }
         }
         Expr::For { iters, body } => {

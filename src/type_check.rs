@@ -27,6 +27,18 @@ pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, Str
             "count", NumList, Num, "count";
             "distance", Point Point, Num, "distance";
             "floor", Num, Num, "floor";
+            "hsv", Num Num Num, Conflict, "hsv";
+            "hsvl1", NumList Num Num, Conflict, "hsv";
+            "hsvl2", Num NumList Num, Conflict, "hsv";
+            "hsvl3", Num Num NumList, Conflict, "hsv";
+            "hsvl12", NumList NumList Num, Conflict, "hsv";
+            "hsvl13", NumList Num NumList, Conflict, "hsv";
+            "hsvl23", Num NumList NumList, Conflict, "hsv";
+            "hsvl123", NumList NumList NumList, Conflict, "hsv";
+            "log", Num Num, Num, "log";
+            "logl1", NumList Num, NumList, "log";
+            "logl2", Num NumList, NumList, "log";
+            "logl", NumList NumList, NumList, "log";
             "max", NumList, Num, "max";
             "min", NumList, Num, "min";
             "mod", Num Num, Num, "mod";
@@ -196,7 +208,13 @@ pub fn check(
         Expr::Div(a, b) => {
             let a = check(*a, vars, funcs, errs);
             let b = check(*b, vars, funcs, errs);
-            naction!(errs; if a == b { a } else { Et::Conflict }; a, b)
+            if a == b && a == ExprType::Num {
+                ExprType::Num
+            } else if a == ExprType::NumList || b == ExprType::NumList {
+                ExprType::NumList
+            } else {
+                ExprType::Conflict
+            }
         }
         Expr::Exp(a, b) => {
             let a = check(*a, vars, funcs, errs);
