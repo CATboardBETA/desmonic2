@@ -408,19 +408,17 @@ fn tr(
                     };
                     let n = ident_ify(&format!(
                         "{}for{}{}",
-                        fn_name.map(|x| x.0).unwrap_or(&"".to_string()),
+                        fn_name.map(|x| x.0.deref()).unwrap_or(""),
                         FOR_ID.load(Ordering::Relaxed),
                         n
                     ));
-                    let content = format!("{}={}", n, tr(e, Some(fn_name2), exprs, ids));
+                    let content = format!("{}={}", n, tr(e, fn_name, exprs, ids));
                     ids.0 += 1;
-                    let mut other = hm();
-                    other.insert("hidden".to_string(), Value::Bool(true));
                     DesmoExpr {
                         id: ids.0,
                         folder_id: ids.1,
                         content,
-                        other,
+                        other: hm(),
                     }
                 })
                 .collect::<Vec<_>>();
