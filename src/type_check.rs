@@ -33,7 +33,7 @@ pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, Str
             "modl", NumList Num, NumList, "mod";
             "modl2", Num NumList, NumList, "mod";
             "modll", NumList NumList, NumList, "mod";
-            "polygon", PointList, Conflict, "polygon";
+            "polygon", PointList, Polygon, "polygon";
             "random", , Num, "random";
             "randomn", Num, NumList, "random";
             "round", Num, Num, "round";
@@ -69,10 +69,12 @@ pub enum ExprType {
     Action,
     Point,
     Point3,
+    Polygon,
 
     NumList,
     PointList,
     Point3List,
+    PolygonList,
     /// If there is exactly one type, it is transparent. If there is more than one type, and all
     /// types are non-list, than it is stored in a list. Otherwise, each element is stored in its
     /// own variable.
@@ -91,9 +93,11 @@ impl Debug for ExprType {
                 ExprType::Action => "Action".to_string(),
                 ExprType::Point => "Point".to_string(),
                 ExprType::Point3 => "Point3".to_string(),
+                ExprType::Polygon => "Polygon".to_string(),
                 ExprType::NumList => "L<Num>".to_string(),
                 ExprType::PointList => "L<Point>".to_string(),
                 ExprType::Point3List => "L<Point3>".to_string(),
+                ExprType::PolygonList => "L<Polygon>".to_string(),
                 ExprType::Struct(StructTy { name, .. }) => name.lock().unwrap().clone(),
                 ExprType::StructList(StructTy { name, .. }) =>
                     format!("L<{}>", name.lock().unwrap()),
@@ -147,11 +151,13 @@ pub fn check(
                 ExprType::Action => ExprType::Conflict,
                 ExprType::Point => ExprType::Point,
                 ExprType::Point3 => ExprType::Point3,
+                ExprType::Polygon => ExprType::Conflict,
                 ExprType::NumList => ExprType::NumList,
                 ExprType::PointList => ExprType::PointList,
                 ExprType::Point3List => ExprType::Point3List,
                 ExprType::Struct(_) => ExprType::Conflict,
                 ExprType::StructList(_) => ExprType::Conflict,
+                ExprType::PolygonList => ExprType::Conflict,
             }
         }
         Expr::Add(a, b) => {
@@ -259,6 +265,7 @@ pub fn check(
                         }
                         ExprType::Point => Et::PointList,
                         ExprType::Point3 => Et::Point3List,
+                        ExprType::Polygon => Et::PolygonList,
                         ExprType::NumList => {
                             errs.push("Cannot have a list of numbers in a list".to_string());
                             Et::Conflict
@@ -282,6 +289,10 @@ pub fn check(
                         }),
                         ExprType::StructList(..) => {
                             errs.push("Cannot have a list of structs in a list".to_string());
+                            Et::Conflict
+                        }
+                        ExprType::PolygonList => {
+                            errs.push("Cannot have a list of polygons in a list".to_string());
                             Et::Conflict
                         }
                     }
@@ -379,6 +390,7 @@ pub fn check(
                     | ExprType::Action
                     | ExprType::Point
                     | ExprType::Point3
+                    | ExprType::Polygon
                     | ExprType::Struct(_) => {
                         errs.push(format!("Cannot iterate over type `{over_ty:?}`"));
                         ExprType::Conflict
@@ -387,6 +399,7 @@ pub fn check(
                     ExprType::PointList => ExprType::Point,
                     ExprType::Point3List => ExprType::Point3,
                     ExprType::StructList(s) => ExprType::Struct(s),
+                    ExprType::PolygonList => ExprType::Polygon,
                 };
                 vars.insert(ident, over_ty);
             }
@@ -407,10 +420,12 @@ pub fn check(
                 ExprType::Action => ExprType::Conflict,
                 ExprType::Point => ExprType::PointList,
                 ExprType::Point3 => ExprType::Point3List,
+                ExprType::Polygon => ExprType::PolygonList,
                 ExprType::Struct(s) => ExprType::StructList(s),
                 ExprType::Point3List
                 | ExprType::NumList
                 | ExprType::PointList
+                | ExprType::PolygonList
                 | ExprType::StructList(_) => {
                     errs.push("Cannot store a list in a list".to_string());
                     ExprType::Conflict
@@ -425,11 +440,13 @@ pub fn check(
                 ExprType::Action => ExprType::Conflict,
                 ExprType::Point => ExprType::Num,
                 ExprType::Point3 => ExprType::Num,
+                ExprType::Polygon => ExprType::Conflict,
                 ExprType::NumList => ExprType::NumList,
                 ExprType::PointList => ExprType::NumList,
                 ExprType::Point3List => ExprType::NumList,
                 ExprType::Struct(_) => ExprType::Conflict,
                 ExprType::StructList(_) => ExprType::Conflict,
+                ExprType::PolygonList => ExprType::Conflict,
             }
         }
         Expr::Dot(Dot {
@@ -538,6 +555,7 @@ pub fn check(
                 | ExprType::Action
                 | ExprType::Point
                 | ExprType::Point3
+                | ExprType::Polygon
                 | ExprType::Struct(_) => {
                     errs.push("Cannot index into non-list".to_string());
                     ExprType::Conflict
@@ -546,6 +564,7 @@ pub fn check(
                 ExprType::PointList => ExprType::Point,
                 ExprType::Point3List => ExprType::Point3,
                 ExprType::StructList(s) => ExprType::Struct(s),
+                ExprType::PolygonList => ExprType::Polygon,
             }
         }
     }
