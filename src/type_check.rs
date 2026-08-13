@@ -15,28 +15,35 @@ pub static BUILTIN_FUNCS: LazyLock<HashMap<String, (Vec<ExprType>, ExprType, Str
     }
         let mut h = HashMap::new();
         i! { h,
+            "abs", Num, Num, "abs";
+            "absl", NumList, NumList, "abs";
+            "abspl", PointList, Num, "abs";
+            "ceil", Num, Num, "ceil";
+            "cos", Num, Num, "cos";
+            "cosl", NumList, NumList, "cos";
+            "count", NumList, Num, "count";
+            "countp", PointList, Num, "count";
+            "countp3", Point3List, Num, "count";
+            "count", NumList, Num, "count";
+            "distance", Point Point, Num, "distance";
+            "floor", Num, Num, "floor";
+            "max", NumList, Num, "max";
+            "min", NumList, Num, "min";
             "mod", Num Num, Num, "mod";
             "modl", NumList Num, NumList, "mod";
             "modl2", Num NumList, NumList, "mod";
             "modll", NumList NumList, NumList, "mod";
-            "sgn", Num, Num, "sgn";
-            "sign", Num, Num, "sgn";
-            "signum", Num, Num, "sgn";
-            "sgnl", NumList, NumList, "sgn";
-            "signl", NumList, NumList, "sgn";
-            "signuml", NumList, NumList, "sgn";
-            "cos", Num, Num, "cos";
-            "cosl", NumList, NumList, "cos";
-            "abs", Num, Num, "abs";
-            "absl", NumList, NumList, "abs";
-            "abspl", PointList, Num, "abs";
-            "min", NumList, Num, "min";
-            "max", NumList, Num, "max";
             "polygon", PointList, Conflict, "polygon";
-            "distance", Point Point, Num, "distance";
-            "total", NumList, Num, "total";
             "random", , Num, "random";
-            "randomn", Num, NumList, "random"
+            "randomn", Num, NumList, "random";
+            "round", Num, Num, "round";
+            "sgn", Num, Num, "sgn";
+            "sgnl", NumList, NumList, "sgn";
+            "sign", Num, Num, "sgn";
+            "signl", NumList, NumList, "sgn";
+            "signum", Num, Num, "sgn";
+            "signuml", NumList, NumList, "sgn";
+            "total", NumList, Num, "total"
         }
         h
     });

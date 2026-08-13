@@ -1,4 +1,4 @@
-use crate::parse::{Comparison, Dot, Expr, Statement};
+use crate::parse::{Comparison, Dot, Expr, Index, Statement};
 use crate::type_check::{BUILTIN_FUNCS, ExprType, StructStorage};
 use convert_case::ccase;
 use serde_json::Value;
@@ -469,7 +469,7 @@ fn tr(
         Expr::Action(acts) => acts
             .iter()
             .map(|(n, expr)| {
-                if let Expr::Struct(s_name, fields) = expr {
+                if let Expr::Struct(_s_name, _fields) = expr {
                     todo!()
                 } else {
                     let n = ident_ify(n);
@@ -486,7 +486,18 @@ fn tr(
         }
         Expr::Index(n, l) => {
             let n = tr(n, fn_name, exprs, ids);
-            let l = tr(l, fn_name, exprs, ids);
+            let l = match l {
+                Index::List(ls) => ls
+                    .iter()
+                    .map(|l| tr(l, fn_name, exprs, ids))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                Index::Range(l1, l2) => format!(
+                    "{}...{}",
+                    tr(l1, fn_name, exprs, ids),
+                    tr(l2, fn_name, exprs, ids)
+                ),
+            };
             format!("{n}\\left[{l}\\right]")
         }
     }

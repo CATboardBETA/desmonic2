@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::collections::HashMap;
 use std::vec;
 use std::sync::{Arc, Mutex};
-use crate::parse::{Dot, Comparison, ComparisonOp, Elif, Expr, Statement, bx};
+use crate::parse::{Dot, Comparison, ComparisonOp, Elif, Expr, Statement, Index,  bx};
 use crate::type_check::{ExprType, STRUCTS, StructTy, StructStorage};
 
 grammar;
@@ -47,8 +47,8 @@ DotVar: Vec<String> = {
 StmtInFn: Statement = "let" <v:Var> "=" <a:Atom> ";" => Statement::Def(v, a);
 
 FnBody: Vec<Statement> = {
-    <a:Atom> ";" => vec![Statement::Expr(a)],
-    <mut l:FnBodyIn> <a:Atom> ";" => {l.push(Statement::Expr(a)); l}
+    <a:Atom> => vec![Statement::Expr(a)],
+    <mut l:FnBodyIn> <a:Atom> => {l.push(Statement::Expr(a)); l}
 }
 
 FnBodyIn: Vec<Statement> = {
@@ -88,7 +88,12 @@ AtomInner: Expr = {
     #[precedence(level="8")]
     <For>,
     #[precedence(level="9")]
-    <v:Boxed<AtomInner>> "[" <a:Boxed<AtomInner>> "]" => Expr::Index(v,a),
+    <Index>
+}
+
+Index: Expr = {
+    <v:Boxed<AtomInner>> "[" <a:ListIn> "]" => Expr::Index(v,Index::List(a)),
+    <v:Boxed<AtomInner>> "[" <a:Boxed<AtomInner>> "~" <b:Boxed<AtomInner>> "]" => Expr::Index(v,Index::Range(a, b)),
 }
 
 StructInst: Expr = {
@@ -131,7 +136,7 @@ A: Expr = {
     Num,
     <v:Var> => Expr::Var(v),
     "(" <Atom> ")",
-    "|" <v:Boxed<Atom>> "|" => Expr::Abs(v),
+    "|" <v:Boxed<AtomInner>> "|" => Expr::Abs(v),
     List,
     Point,
     Call,

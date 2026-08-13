@@ -109,7 +109,13 @@ pub enum Expr {
     Dot(Dot),
     Struct(String, Vec<(String, Expr)>),
     Action(Vec<(String, Expr)>),
-    Index(Box<Expr>, Box<Expr>),
+    Index(Box<Expr>, Index),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Index {
+    List(Vec<Expr>),
+    Range(Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug, Clone)]
