@@ -186,7 +186,7 @@ pub fn transpile_many(
                             }
                         }
                         new.extend(
-                            dbg!(objs)
+                            objs
                                 .into_iter()
                                 .map(|(k, v)| (k, serde_json::to_value(v).unwrap())),
                         );

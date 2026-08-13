@@ -401,7 +401,7 @@ pub fn check(
                     ExprType::StructList(s) => ExprType::Struct(s),
                     ExprType::PolygonList => ExprType::Polygon,
                 };
-                vars.insert(ident, over_ty);
+                vars2.insert(ident, over_ty);
             }
             let (rest, last) = body.split_at(body.len() - 1);
             for x in rest {
