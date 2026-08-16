@@ -14,29 +14,40 @@ pub struct GraphState {
 
 impl GraphState {
     pub fn from_vec(input: Vec<DesmoExpr>) -> Self {
+        let mut ticker = None;
         let exprs = input
             .into_iter()
-            .map(|e| {
+            .filter_map(|e| {
                 if let Some(title) = e.content.strip_prefix("\\folder ") {
-                    Expression::Folder {
+                    Some(Expression::Folder {
                         id: e.id.to_string(),
                         title: title.to_string(),
                         other: e.other,
-                    }
+                    })
+                } else if let Some(latex) = e.content.strip_prefix("\\ticker ") {
+                    ticker = Some(Ticker {
+                        handler_latex: latex.to_string(),
+                        open: true,
+                        playing: false,
+                    });
+                    None
                 } else {
-                    Expression::Expression {
+                    Some(Expression::Expression {
                         color: None,
                         folder_id: e.folder_id.map(|x| x.to_string()),
                         id: e.id.to_string(),
                         latex: e.content,
                         other: e.other,
-                    }
+                    })
                 }
             })
             .collect::<Vec<_>>();
         Self {
             random_seed: "desmonic".to_string(),
-            expressions: Expressions { list: exprs },
+            expressions: Expressions {
+                list: exprs,
+                ticker,
+            },
             version: 11,
             graph: GraphMeta {
                 viewport: ViewportMeta {
@@ -60,6 +71,15 @@ impl GraphState {
 #[serde(rename_all = "camelCase")]
 struct Expressions {
     list: Vec<Expression>,
+    ticker: Option<Ticker>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Ticker {
+    handler_latex: String,
+    open: bool,
+    playing: bool,
 }
 
 #[derive(Serialize)]

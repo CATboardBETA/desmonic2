@@ -64,7 +64,7 @@ fn main() {
     let cli = Cli::parse();
     if let Commands::Build { input, .. } = cli.command {
         let file_str = fs::read_to_string(input).expect("Failed to read input file.");
-        let mut ast = parse::gen_ast(&file_str).unwrap();
+        let (mut ast, tick_ast) = parse::gen_ast(&file_str).unwrap();
         let mut vars = HashMap::new();
         let mut funcs = type_check::BUILTIN_FUNCS
             .clone()
@@ -72,6 +72,9 @@ fn main() {
             .map(|(k, (v1, v2, _))| (k, (v1, v2)))
             .collect();
         let mut errs = vec![];
+        if let Some(tick_ast) = tick_ast {
+            ast.push(tick_ast)
+        }
         type_check(&mut ast, &mut vars, &mut funcs, &mut errs);
         let transpiled = transpile_many(ast, None, 0, None);
 
@@ -260,7 +263,15 @@ fn type_check(
                     errs.push("Implicit may only be of numbers or lists of numbers".to_string());
                 }
             }
-            Statement::Struct(..) => {}
+            Statement::Struct(..) => {
+                // Structs *definitions* don't require any special type checking, it is all handled
+                // in the grammar file.
+            }
+            Statement::Ticker(acts) => {
+                for act in acts {
+                    type_check::check(act.clone(), vars, funcs, errs);
+                }
+            }
         }
     }
 }

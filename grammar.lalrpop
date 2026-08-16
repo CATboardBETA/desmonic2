@@ -7,7 +7,18 @@ use crate::type_check::{ExprType, STRUCTS, StructTy, StructStorage};
 
 grammar;
 
-pub Program = <Stmt*>;
+pub Program = <Stmt*> <Ticker?>;
+
+Ticker: Statement = {
+    "tick" "{" <a:TickerIn> "}" => Statement::Ticker(a),
+}
+
+TickerIn: Vec<Expr> = {
+    <mut l:TickerIn> ";" <v:Var> "->" <a:AtomInner> => { l.push(Expr::Action(vec![(v,a)])); l },
+    <mut l:TickerIn> ";" <v:Var> => { l.push(Expr::Var(v)); l },
+    <v:Var> "->" <a:AtomInner> => vec![Expr::Action(vec![(v, a)])],
+    <v:Var> => vec![Expr::Var(v)]
+}
 
 Stmt: Statement = {
     <a:Atom> ";" => Statement::Expr(a),

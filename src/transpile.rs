@@ -209,7 +209,22 @@ pub fn transpile_many(
             }
             Statement::Struct(..) => {
                 // Struct definitions don't transpile into anything. They are only used by the
-                // Desmonic transpiler.
+                // Desmonic type checker.
+            }
+            Statement::Ticker(acts) => {
+                let content = format!(
+                    "\\ticker {}",
+                    acts.iter()
+                        .map(|x| tr(x, fn_name, &mut exprs, &mut (id, fold_id)))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                );
+                exprs.push(DesmoExpr {
+                    id,
+                    folder_id: fold_id,
+                    content: dbg!(content),
+                    other: hm(),
+                })
             }
         }
     }
