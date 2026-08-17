@@ -222,7 +222,7 @@ pub fn transpile_many(
                 exprs.push(DesmoExpr {
                     id,
                     folder_id: fold_id,
-                    content: dbg!(content),
+                    content: content,
                     other: hm(),
                 })
             }
