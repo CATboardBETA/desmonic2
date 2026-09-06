@@ -222,7 +222,7 @@ pub fn transpile_many(
                 exprs.push(DesmoExpr {
                     id,
                     folder_id: fold_id,
-                    content: content,
+                    content,
                     other: hm(),
                 })
             }
@@ -458,19 +458,22 @@ fn tr(
         Expr::Abs(e) => format!("\\left|{}\\right|", tr(e, fn_name, exprs, ids)),
         Expr::Dot(Dot {
             struct_storage,
-            x: _,
+            x,
             y,
         }) => match struct_storage.storage.lock().unwrap().deref() {
-            StructStorage::Unknown => unreachable!(),
-            StructStorage::OneVar(_v) => ident_ify(&ccase!(
+                StructStorage::Unknown => {
+                    // point
+                    format!("{}.{}", ident_ify(&ccase!(camel, x)), ident_ify(&ccase!(camel, y)))
+                },
+                StructStorage::OneVar(_v) => ident_ify(&ccase!(
                 camel,
                 format!("{}_{}", struct_storage.name.lock().unwrap(), y)
             )),
-            StructStorage::ManyVars(vs) => {
-                let v = vs[struct_storage.index.lock().unwrap()[y]].clone();
-                ident_ify(&ccase!(camel, v))
+                StructStorage::ManyVars(vs) => {
+                    let v = vs[struct_storage.index.lock().unwrap()[y]].clone();
+                    ident_ify(&ccase!(camel, v))
+                }
             }
-        },
         Expr::Struct(s_name, fields) => {
             let mut args = vec![];
             let i = STRUCT_ID.fetch_add(1, Ordering::Relaxed);

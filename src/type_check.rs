@@ -178,7 +178,24 @@ pub fn check(
             if a == b && a == ExprType::Num {
                 ExprType::Num
             } else if a == ExprType::NumList || b == ExprType::NumList {
-                ExprType::NumList
+                if a == ExprType::Point
+                    || a == ExprType::PointList
+                    || b == ExprType::Point
+                    || b == ExprType::PointList
+                {
+                    ExprType::PointList
+                } else {
+                    ExprType::NumList
+                }
+            } else if (a == ExprType::Point && b == ExprType::Num)
+                || (a == ExprType::Num && b == ExprType::Point)
+                || (a == ExprType::Point && a == b)
+            {
+                ExprType::Point
+            } else if (a == ExprType::PointList && b == ExprType::Point)
+                || (a == ExprType::Point && b == ExprType::PointList)
+            {
+                ExprType::PointList
             } else {
                 ExprType::Conflict
             }
@@ -189,7 +206,24 @@ pub fn check(
             if a == b && a == ExprType::Num {
                 ExprType::Num
             } else if a == ExprType::NumList || b == ExprType::NumList {
-                ExprType::NumList
+                if a == ExprType::Point
+                    || a == ExprType::PointList
+                    || b == ExprType::Point
+                    || b == ExprType::PointList
+                {
+                    ExprType::PointList
+                } else {
+                    ExprType::NumList
+                }
+            } else if (a == ExprType::Point && b == ExprType::Num)
+                || (a == ExprType::Num && b == ExprType::Point)
+                || (a == ExprType::Point && a == b)
+            {
+                ExprType::Point
+            } else if (a == ExprType::PointList && b == ExprType::Point)
+                || (a == ExprType::Point && b == ExprType::PointList)
+            {
+                ExprType::PointList
             } else {
                 ExprType::Conflict
             }
@@ -200,7 +234,24 @@ pub fn check(
             if a == b && a == ExprType::Num {
                 ExprType::Num
             } else if a == ExprType::NumList || b == ExprType::NumList {
-                ExprType::NumList
+                if a == ExprType::Point
+                    || a == ExprType::PointList
+                    || b == ExprType::Point
+                    || b == ExprType::PointList
+                {
+                    ExprType::PointList
+                } else {
+                    ExprType::NumList
+                }
+            } else if (a == ExprType::Point && b == ExprType::Num)
+                || (a == ExprType::Num && b == ExprType::Point)
+                || (a == ExprType::Point && a == b)
+            {
+                ExprType::Point
+            } else if (a == ExprType::PointList && b == ExprType::Point)
+                || (a == ExprType::Point && b == ExprType::PointList)
+            {
+                ExprType::PointList
             } else {
                 ExprType::Conflict
             }
@@ -211,7 +262,24 @@ pub fn check(
             if a == b && a == ExprType::Num {
                 ExprType::Num
             } else if a == ExprType::NumList || b == ExprType::NumList {
-                ExprType::NumList
+                if a == ExprType::Point
+                    || a == ExprType::PointList
+                    || b == ExprType::Point
+                    || b == ExprType::PointList
+                {
+                    ExprType::PointList
+                } else {
+                    ExprType::NumList
+                }
+            } else if (a == ExprType::Point && b == ExprType::Num)
+                || (a == ExprType::Num && b == ExprType::Point)
+                || (a == ExprType::Point && a == b)
+            {
+                ExprType::Point
+            } else if (a == ExprType::PointList && b == ExprType::Point)
+                || (a == ExprType::Point && b == ExprType::PointList)
+            {
+                ExprType::PointList
             } else {
                 ExprType::Conflict
             }
@@ -472,23 +540,32 @@ pub fn check(
             x,
             y,
         }) => {
-            let ExprType::Struct(x_ty) = vars[&x].clone() else {
-                unreachable!()
-            };
-            let x_ty_name = x_ty.name.lock().unwrap().clone();
-            if let Some(ty) = STRUCTS.lock().unwrap().deref()[&x_ty_name].get(&y) {
-                *struct_storage.storage.lock().unwrap() = x_ty.storage.lock().unwrap().clone();
-                *struct_storage.name.lock().unwrap() = x_ty_name;
-                *struct_storage.index.lock().unwrap() = x_ty.index.lock().unwrap().clone();
-                ty.clone()
+            if let ExprType::Point = vars[(&x)].clone() {
+                if y == "x" || y == "y" {
+                    ExprType::Num
+                } else {
+                    errs.push("Only `x` and `y` may be used as fields of a point".to_string());
+                    ExprType::Conflict
+                }
             } else {
-                errs.push(format!(
-                    "Struct `{}` (named `{}`) has no field `{}`",
-                    struct_storage.name.lock().unwrap(),
-                    x,
-                    y
-                ));
-                ExprType::Conflict
+                let ExprType::Struct(x_ty) = vars[&x].clone() else {
+                    unreachable!()
+                };
+                let x_ty_name = x_ty.name.lock().unwrap().clone();
+                if let Some(ty) = STRUCTS.lock().unwrap().deref()[&x_ty_name].get(&y) {
+                    *struct_storage.storage.lock().unwrap() = x_ty.storage.lock().unwrap().clone();
+                    *struct_storage.name.lock().unwrap() = x_ty_name;
+                    *struct_storage.index.lock().unwrap() = x_ty.index.lock().unwrap().clone();
+                    ty.clone()
+                } else {
+                    errs.push(format!(
+                        "Struct `{}` (named `{}`) has no field `{}`",
+                        struct_storage.name.lock().unwrap(),
+                        x,
+                        y
+                    ));
+                    ExprType::Conflict
+                }
             }
         }
         Expr::Struct(s_name, fields) => {
