@@ -44,8 +44,8 @@ pub fn transpile_many(
             Statement::Def(n_og, mut e) => {
                 let n = {
                     let replaced = n_og.replace('_', "");
-                    let replaced = if let Some((fn_name, _params, rename_only)) = fn_name
-                        && rename_only.clone().is_some_and(|x| x.contains_key(&n_og))
+                    let replaced = if let Some((fn_name, params, rename_only)) = fn_name
+                        && !rename_only.clone().is_some_and(|x| x.contains_key(&replaced))
                     {
                         format!("{fn_name}{replaced}")
                     } else {
@@ -271,9 +271,8 @@ fn tr(
         ),
         Expr::Var(s) => {
             let replaced = s.replace('_', "");
-            let replaced = if let Some((fn_name, params, rename_only)) = fn_name
-                && params.iter().all(|x| x.0 != *s)
-                && rename_only.clone().is_some_and(|x| x.contains_key(s))
+            let replaced = if let Some((fn_name, _params, rename_only)) = fn_name
+                && !rename_only.clone().is_some_and(|x| x.contains_key(s))
             {
                 format!("{fn_name}{replaced}")
             } else {
@@ -463,12 +462,20 @@ fn tr(
         }) => match struct_storage.storage.lock().unwrap().deref() {
                 StructStorage::Unknown => {
                     // point
-                    format!("{}.{}", ident_ify(&ccase!(camel, x)), ident_ify(&ccase!(camel, y)))
+                    let replaced = x.replace("_", "");
+                    let replaced = if let Some((fn_name, _params, rename_only)) = fn_name
+                        && !rename_only.clone().is_some_and(|x1| x1.contains_key(x))
+                    {
+                        format!("{fn_name}{replaced}")
+                    } else {
+                        replaced
+                    };
+                    format!("{}.{}", ident_ify(&replaced), y)
                 },
                 StructStorage::OneVar(_v) => ident_ify(&ccase!(
-                camel,
-                format!("{}_{}", struct_storage.name.lock().unwrap(), y)
-            )),
+                    camel,
+                    format!("{}_{}", struct_storage.name.lock().unwrap(), y)
+                )),
                 StructStorage::ManyVars(vs) => {
                     let v = vs[struct_storage.index.lock().unwrap()[y]].clone();
                     ident_ify(&ccase!(camel, v))

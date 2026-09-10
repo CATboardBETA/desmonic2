@@ -540,7 +540,7 @@ pub fn check(
             x,
             y,
         }) => {
-            if let ExprType::Point = vars[(&x)].clone() {
+            if let ExprType::Point = vars[&x].clone() {
                 if y == "x" || y == "y" {
                     ExprType::Num
                 } else {
