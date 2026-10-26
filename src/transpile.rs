@@ -270,22 +270,27 @@ fn tr(
             tr(e, fn_name, exprs, ids)
         ),
         Expr::Var(s) => {
-            let replaced = s.replace('_', "");
-            let replaced = if let Some((fn_name, _params, rename_only)) = fn_name
-                && !rename_only.clone().is_some_and(|x| x.contains_key(s))
-            {
-                format!("{fn_name}{replaced}")
-            } else {
-                replaced
-            };
-            let (first, rest) = replaced.split_at(1);
-            let rest = if rest.is_empty() {
-                String::new()
-            } else {
-                format!("_{{{rest}}}")
-            };
+            if s != "dt" {
+                let replaced = s.replace('_', "");
+                let replaced = if let Some((fn_name, params, rename_only)) = fn_name
+                    && !rename_only.clone().is_some_and(|x| x.contains_key(s))
+                    && !params.iter().find(|(n, _)| n == s).is_some()
+                {
+                    format!("{fn_name}{replaced}")
+                } else {
+                    replaced
+                };
+                let (first, rest) = replaced.split_at(1);
+                let rest = if rest.is_empty() {
+                    String::new()
+                } else {
+                    format!("_{{{rest}}}")
+                };
 
-            format!("{first}{rest}")
+                format!("{first}{rest}")
+            } else {
+                "\\operatorname{dt}".to_string()
+            }
         }
         Expr::If {
             cmp,
@@ -463,8 +468,9 @@ fn tr(
                 StructStorage::Unknown => {
                     // point
                     let replaced = x.replace("_", "");
-                    let replaced = if let Some((fn_name, _params, rename_only)) = fn_name
+                    let replaced = if let Some((fn_name, params, rename_only)) = fn_name
                         && !rename_only.clone().is_some_and(|x1| x1.contains_key(x))
+                        && !params.iter().find(|(n, _)| n == x).is_some()
                     {
                         format!("{fn_name}{replaced}")
                     } else {
