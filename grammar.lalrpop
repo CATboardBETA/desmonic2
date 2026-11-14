@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::collections::HashMap;
 use std::vec;
 use std::sync::{Arc, Mutex};
-use crate::parse::{Dot, Comparison, ComparisonOp, Elif, Expr, Statement, Index,  bx};
+use crate::parse::{Dot, Comparison, ComparisonOp, Elif, Expr, Statement, Index,  SwitchCase, bx};
 use crate::type_check::{ExprType, STRUCTS, StructTy, StructStorage};
 
 grammar;
@@ -98,10 +98,13 @@ AtomInner: Expr = {
     #[precedence(level="8")]
     <If>,
     #[precedence(level="8")]
+    <Switch>,
+    #[precedence(level="8")]
     <For>,
     #[precedence(level="9")]
     <Index>
 }
+
 
 Index: Expr = {
     <v:Boxed<AtomInner>> "[" <a:ListIn> "]" => Expr::Index(v,Index::List(a)),
@@ -129,6 +132,15 @@ ForList: Vec<(String, Expr)> = {
 If: Expr = {
     "if" <cmp:FullComp> "{" <body:Boxed<Atom>> "}" <elifs:Elif*> <elsee:Else?>  =>
          Expr::If {cmp, body, elifs, elsee}
+}
+
+Switch: Expr = {
+    "switch" <on:Boxed<AtomInner>> "{" <cases:Case+> "}" => Expr::Switch { on, cases }
+}
+
+Case: SwitchCase = {
+    "default" "{" <then:FnBody> "}" => SwitchCase::Default { then },
+    "case" <is:AtomInner> "{" <then:FnBody>"}" => SwitchCase::Case { is, then }
 }
 
 Else: Box<Expr> = "else" "{" <Boxed<Atom>> "}";

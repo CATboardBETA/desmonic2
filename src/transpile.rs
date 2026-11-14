@@ -1,4 +1,4 @@
-use crate::parse::{Comparison, Dot, Expr, Index, Statement};
+use crate::parse::{Comparison, Dot, Expr, Index, Statement, SwitchCase};
 use crate::type_check::{BUILTIN_FUNCS, ExprType, StructStorage};
 use convert_case::ccase;
 use serde_json::Value;
@@ -7,6 +7,7 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 static FOR_ID: AtomicI32 = AtomicI32::new(0);
+static SWITCH_ID: AtomicI32 = AtomicI32::new(0);
 pub static STRUCT_ID: AtomicI32 = AtomicI32::new(0);
 
 #[derive(Debug)]
@@ -45,7 +46,9 @@ pub fn transpile_many(
                 let n = {
                     let replaced = n_og.replace('_', "");
                     let replaced = if let Some((fn_name, params, rename_only)) = fn_name
-                        && !rename_only.clone().is_some_and(|x| x.contains_key(&replaced))
+                        && !rename_only
+                            .clone()
+                            .is_some_and(|x| x.contains_key(&replaced))
                     {
                         format!("{fn_name}{replaced}")
                     } else {
@@ -225,15 +228,13 @@ pub fn transpile_many(
                     content,
                     other: hm(),
                 })
-            },
-            Statement::Note(s) => {
-                exprs.push(DesmoExpr {
-                    id,
-                    folder_id: fold_id,
-                    content: format!("\\text {}", s.replace("\n", "\\n")),
-                    other: hm(),
-                })
             }
+            Statement::Note(s) => exprs.push(DesmoExpr {
+                id,
+                folder_id: fold_id,
+                content: format!("\\text {}", s.replace("\n", "\\n")),
+                other: hm(),
+            }),
         }
     }
     exprs
@@ -473,28 +474,28 @@ fn tr(
             x,
             y,
         }) => match struct_storage.storage.lock().unwrap().deref() {
-                StructStorage::Unknown => {
-                    // point
-                    let replaced = x.replace("_", "");
-                    let replaced = if let Some((fn_name, params, rename_only)) = fn_name
-                        && !rename_only.clone().is_some_and(|x1| x1.contains_key(x))
-                        && !params.iter().find(|(n, _)| n == x).is_some()
-                    {
-                        format!("{fn_name}{replaced}")
-                    } else {
-                        replaced
-                    };
-                    format!("{}.{}", ident_ify(&replaced), y)
-                },
-                StructStorage::OneVar(_v) => ident_ify(&ccase!(
-                    camel,
-                    format!("{}_{}", struct_storage.name.lock().unwrap(), y)
-                )),
-                StructStorage::ManyVars(vs) => {
-                    let v = vs[struct_storage.index.lock().unwrap()[y]].clone();
-                    ident_ify(&ccase!(camel, v))
-                }
+            StructStorage::Unknown => {
+                // point
+                let replaced = x.replace("_", "");
+                let replaced = if let Some((fn_name, params, rename_only)) = fn_name
+                    && !rename_only.clone().is_some_and(|x1| x1.contains_key(x))
+                    && !params.iter().find(|(n, _)| n == x).is_some()
+                {
+                    format!("{fn_name}{replaced}")
+                } else {
+                    replaced
+                };
+                format!("{}.{}", ident_ify(&replaced), y)
             }
+            StructStorage::OneVar(_v) => ident_ify(&ccase!(
+                camel,
+                format!("{}_{}", struct_storage.name.lock().unwrap(), y)
+            )),
+            StructStorage::ManyVars(vs) => {
+                let v = vs[struct_storage.index.lock().unwrap()[y]].clone();
+                ident_ify(&ccase!(camel, v))
+            }
+        },
         Expr::Struct(s_name, fields) => {
             let mut args = vec![];
             let i = STRUCT_ID.fetch_add(1, Ordering::Relaxed);
@@ -546,6 +547,137 @@ fn tr(
                 ),
             };
             format!("{n}\\left[{l}\\right]")
+        },
+        Expr::Switch { on, cases } => {
+            let on = tr(on, fn_name, exprs, ids);
+            let gen_cmp = |against: &SwitchCase| -> String {
+                match against {
+                    SwitchCase::Case { is, then } => {
+                        let case = tr(is, fn_name, exprs, ids);
+                        let Some((Statement::Expr(then_val), then_rest)) = then.split_last() else { unreachable!() };
+                        let fn_name_pt3 = then_rest
+                            .iter()
+                            .map(|def| {
+                                let Statement::Def(n, _e) = def else {
+                                    unreachable!()
+                                };
+                                (
+                                    n.clone(),
+                                    if let Some(fn_name) = fn_name {
+                                        format!("{}switch{}{}", fn_name.0, FOR_ID.load(Ordering::Relaxed), n)
+                                    } else {
+                                        format!("switch{}{}", FOR_ID.load(Ordering::Relaxed), n)
+                                    },
+                                )
+                            })
+                            .collect::<HashMap<String, String>>();
+                        let fn_name2 = if let Some(fn_name) = fn_name {
+                            (
+                                &format!("{}switch{}", fn_name.0, FOR_ID.load(Ordering::Relaxed)),
+                                fn_name.1,
+                                &Some(fn_name_pt3.clone()),
+                            )
+                        } else {
+                            (
+                                &format!("switch{}", FOR_ID.load(Ordering::Relaxed)),
+                                &vec![],
+                                &Some(fn_name_pt3.clone()),
+                            )
+                        };
+                        let mut additional = then_rest
+                            .iter()
+                            .map(|def| {
+                                let Statement::Def(n, e) = def else {
+                                    unreachable!()
+                                };
+                                let n = ident_ify(&format!(
+                                    "{}switch{}{}",
+                                    fn_name.map(|x| x.0.deref()).unwrap_or(""),
+                                    SWITCH_ID.load(Ordering::Relaxed),
+                                    n
+                                ));
+                                let content = format!("{}={}", n, tr(e, fn_name, exprs, ids));
+                                ids.0 += 1;
+                                let mut other = hm();
+                                other.insert("hidden".to_string(), Value::String("true".to_string()));
+                                DesmoExpr {
+                                    id: ids.0,
+                                    folder_id: ids.1,
+                                    content,
+                                    other,
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        exprs.append(&mut additional);
+                        let then = tr(then_val, Some(fn_name2), exprs, ids);
+                        format!("{on}={case}:{then}")
+
+                    }
+                    SwitchCase::Default { then } => {
+                        let Some((Statement::Expr(then_val), then_rest)) = then.split_last() else { unreachable!() };
+
+                        let fn_name_pt3 = then_rest
+                            .iter()
+                            .map(|def| {
+                                let Statement::Def(n, _e) = def else {
+                                    unreachable!()
+                                };
+                                (
+                                    n.clone(),
+                                    if let Some(fn_name) = fn_name {
+                                        format!("{}switch{}{}", fn_name.0, FOR_ID.load(Ordering::Relaxed), n)
+                                    } else {
+                                        format!("switch{}{}", FOR_ID.load(Ordering::Relaxed), n)
+                                    },
+                                )
+                            })
+                            .collect::<HashMap<String, String>>();
+                        let fn_name2 = if let Some(fn_name) = fn_name {
+                            (
+                                &format!("{}switch{}", fn_name.0, FOR_ID.load(Ordering::Relaxed)),
+                                fn_name.1,
+                                &Some(fn_name_pt3.clone()),
+                            )
+                        } else {
+                            (
+                                &format!("switch{}", FOR_ID.load(Ordering::Relaxed)),
+                                &vec![],
+                                &Some(fn_name_pt3.clone()),
+                            )
+                        };
+                        let mut additional = then_rest
+                            .iter()
+                            .map(|def| {
+                                let Statement::Def(n, e) = def else {
+                                    unreachable!()
+                                };
+                                let n = ident_ify(&format!(
+                                    "{}switch{}{}",
+                                    fn_name.map(|x| x.0.deref()).unwrap_or(""),
+                                    SWITCH_ID.load(Ordering::Relaxed),
+                                    n
+                                ));
+                                let content = format!("{}={}", n, tr(e, fn_name, exprs, ids));
+                                ids.0 += 1;
+                                let mut other = hm();
+                                other.insert("hidden".to_string(), Value::String("true".to_string()));
+                                DesmoExpr {
+                                    id: ids.0,
+                                    folder_id: ids.1,
+                                    content,
+                                    other,
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        exprs.append(&mut additional);
+                        tr(then_val, Some(fn_name2), exprs, ids)
+                    }
+                }
+            };
+            let cases = cases.iter().map(gen_cmp).collect::<Vec<_>>().join(",");
+            SWITCH_ID.fetch_add(1, Ordering::Relaxed);
+
+            format!("\\left{{{cases}\\right}}")
         }
     }
 }

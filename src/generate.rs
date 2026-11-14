@@ -110,8 +110,8 @@ enum Expression {
         id: String,
         #[serde(rename = "folderId")]
         folder_id: Option<String>,
-        text: String
-    }
+        text: String,
+    },
 }
 
 #[derive(Serialize)]

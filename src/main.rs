@@ -271,7 +271,7 @@ fn type_check(
                 for act in acts {
                     type_check::check(act.clone(), vars, funcs, errs);
                 }
-            },
+            }
             parse::Statement::Note(_) => {
                 // Notes have nothing to check :-)
             }

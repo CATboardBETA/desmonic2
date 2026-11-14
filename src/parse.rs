@@ -81,6 +81,12 @@ impl Display for ComparisonOp {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum SwitchCase {
+    Case {is: Expr, then: Vec<Statement>},
+    Default{then: Vec<Statement>}
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Num(f32),
     Neg(Box<Expr>),
@@ -95,6 +101,10 @@ pub enum Expr {
         body: Box<Expr>,
         elifs: Vec<Elif>,
         elsee: Option<Box<Expr>>,
+    },
+    Switch {
+        on: Box<Expr>,
+        cases: Vec<SwitchCase>,
     },
     For {
         iters: Vec<(String, Expr)>,
