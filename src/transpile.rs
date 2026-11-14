@@ -225,6 +225,14 @@ pub fn transpile_many(
                     content,
                     other: hm(),
                 })
+            },
+            Statement::Note(s) => {
+                exprs.push(DesmoExpr {
+                    id,
+                    folder_id: fold_id,
+                    content: format!("\\text {}", s.replace("\n", "\\n")),
+                    other: hm(),
+                })
             }
         }
     }

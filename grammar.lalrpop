@@ -25,6 +25,7 @@ Stmt: Statement = {
     <a1:Atom> <c:Comp> <a2:Atom> ";" => Statement::Implicit(a1, c, a2),
     "let" <v:Var> "=" <a:Atom> ";" => Statement::Def(v, a),
     "fn" <n:Var> <ps:VarList> "{" <b:FnBody> "}" => Statement::Fn { name: n, params: ps, body: b },
+    "note" <s:Str> ";" => Statement::Note(s),
     <Styled>,
     <Struct>,
 }

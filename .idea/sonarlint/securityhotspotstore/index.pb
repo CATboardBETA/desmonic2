@@ -3,9 +3,6 @@
 src/main.rs,4/b/4b569f42a6967dec04275af54f4ca9ab6a4eee64
 ?
 src/generate.rs,b/e/be9814d01ae6a1a5c0b9d37b9f4bb2b876ed4b11
-:
-
-test.desmo,e/8/e8553885358ed64067895a6f15bb62ab7ea8753e
 @
 src/transpile.rs,c/3/c33d06dc88942ec5dc8bc814255a56de3da7e001
 ?
@@ -20,5 +17,5 @@ Cargo.toml,1/b/1b290eb385892bfd4870c08a785598e98c8691b7
 :
 
 .gitignore,a/5/a5cc2925ca8258af241be7e5b0381edf30266302
-=
-pinball.desmo,8/e/8e2b4e91cb1df222fc41e34dec4958629686be1d
+A
+interpreter.desmo,a/c/ac89993092e577eeef88417ab226f98994020951

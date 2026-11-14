@@ -161,6 +161,7 @@ pub enum Statement {
     Implicit(Expr, ComparisonOp, Expr),
     Struct(String, HashMap<String, ExprType>),
     Ticker(Vec<Expr>),
+    Note(String),
 }
 
 fn bx<T>(x: T) -> Box<T> {

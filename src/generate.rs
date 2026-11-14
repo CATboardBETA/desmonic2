@@ -31,6 +31,12 @@ impl GraphState {
                         playing: false,
                     });
                     None
+                } else if let Some(content) = e.content.strip_prefix("\\text ") {
+                    Some(Expression::Text {
+                        id: e.id.to_string(),
+                        folder_id: e.folder_id.map(|x| x.to_string()),
+                        text: content.to_owned(),
+                    })
                 } else {
                     Some(Expression::Expression {
                         color: None,
@@ -100,6 +106,12 @@ enum Expression {
         #[serde(flatten)]
         other: HashMap<String, Value>,
     },
+    Text {
+        id: String,
+        #[serde(rename = "folderId")]
+        folder_id: Option<String>,
+        text: String
+    }
 }
 
 #[derive(Serialize)]
