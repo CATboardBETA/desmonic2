@@ -22,7 +22,7 @@ TickerIn: Vec<Expr> = {
 
 Stmt: Statement = {
     <a:Atom> ";" => Statement::Expr(a),
-    <a1:Atom> <c:Comp> <a2:Atom> ";" => Statement::Implicit(a1, c, a2),
+    <a1:AtomInner> <c:Comp> <a2:AtomInner> ";" => Statement::Implicit(a1, c, a2),
     "let" <v:Var> "=" <a:Atom> ";" => Statement::Def(v, a),
     "fn" <n:Var> <ps:VarList> "{" <b:FnBody> "}" => Statement::Fn { name: n, params: ps, body: b },
     "note" <s:Str> ";" => Statement::Note(s),
@@ -83,6 +83,10 @@ AtomInner: Expr = {
     #[precedence(level="1")]
     <A>,
     #[precedence(level="2")]
+    <v:Boxed<AtomInner>> "[" <a:ListIn> "]" => Expr::Index(v,Index::List(a)),
+    #[precedence(level="2")]
+    <v:Boxed<AtomInner>> "[" <a:Boxed<AtomInner>> "~" <b:Boxed<AtomInner>> "]" => Expr::Index(v,Index::Range(a, b)),
+    #[precedence(level="2")]
     <StructInst>,
     #[precedence(level="3")]
     <x:Var> "." <y:Var> => Expr::Dot(Dot { x, y, struct_storage: StructTy { name: Arc::new(Mutex::new("".to_string())), index: Arc::new(Mutex::new(HashMap::new())), storage: Arc::new(Mutex::new(StructStorage::Unknown)) }}),
@@ -94,8 +98,6 @@ AtomInner: Expr = {
     <a:AtomInner> "/" <b:AtomInner> => Expr::Div(bx(a), bx(b)),
     #[precedence(level="6")] #[assoc(side="right")]
     "-" <a:AtomInner> => Expr::Neg(bx(a)),
-    #[precedence(level="6")] #[assoc(side="right")]
-    "+" <AtomInner>,
     #[precedence(level="7")] #[assoc(side="left")]
     <a:AtomInner> "+" <b:AtomInner> => Expr::Add(bx(a), bx(b)),
     #[precedence(level="7")] #[assoc(side="left")]
@@ -106,15 +108,8 @@ AtomInner: Expr = {
     <Switch>,
     #[precedence(level="8")]
     <For>,
-    #[precedence(level="9")]
-    <Index>
 }
 
-
-Index: Expr = {
-    <v:Boxed<AtomInner>> "[" <a:ListIn> "]" => Expr::Index(v,Index::List(a)),
-    <v:Boxed<AtomInner>> "[" <a:Boxed<AtomInner>> "~" <b:Boxed<AtomInner>> "]" => Expr::Index(v,Index::Range(a, b)),
-}
 
 StructInst: Expr = {
     "new" <n:Var> "{" "}" => Expr::Struct(n, vec![]),
@@ -122,20 +117,20 @@ StructInst: Expr = {
 }
 
 StructInstIn: Vec<(String, Expr)> = {
-    <mut l:StructInstIn> "," <n:Var> ":"  <a:Atom> => {l.push((n, a)); l},
-    <n:Var> ":" <a:Atom> => {let mut l = Vec::new(); l.push((n, a)); l}
+    <mut l:StructInstIn> "," <n:Var> ":"  <a:AtomInner> => {l.push((n, a)); l},
+    <n:Var> ":" <a:AtomInner> => {let mut l = Vec::new(); l.push((n, a)); l}
 };
 
 For: Expr = {
     "foreach" <iters:ForList> "{" <body:FnBody> "}" => Expr::For { iters, body } };
 
 ForList: Vec<(String, Expr)> = {
-    <mut l:ForList> "," <i:Var> "in" <o:Atom> => {l.push((i, o)); l},
-    <i:Var> "in" <o:Atom> => vec![(i, o)]
+    <mut l:ForList> "," <i:Var> "in" <o:AtomInner> => {l.push((i, o)); l},
+    <i:Var> "in" <o:AtomInner> => vec![(i, o)]
 }
 
 If: Expr = {
-    "if" <cmp:FullComp> "{" <body:Boxed<Atom>> "}" <elifs:Elif*> <elsee:Else?>  =>
+    "if" <cmp:FullComp> "{" <body:Boxed<AtomInner>> "}" <elifs:Elif*> <elsee:Else?>  =>
          Expr::If {cmp, body, elifs, elsee}
 }
 
@@ -148,10 +143,10 @@ Case: SwitchCase = {
     "case" <is:AtomInner> "{" <then:FnBody>"}" => SwitchCase::Case { is, then }
 }
 
-Else: Box<Expr> = "else" "{" <Boxed<Atom>> "}";
-Elif: Elif = "elif" <cmp:FullComp> "{" <body:Boxed<Atom>> "}" => Elif {cmp, body};
+Else: Box<Expr> = "else" "{" <Boxed<AtomInner>> "}";
+Elif: Elif = "elif" <cmp:FullComp> "{" <body:Boxed<AtomInner>> "}" => Elif {cmp, body};
 
-FullComp: Comparison = <c:Boxed<Atom>> <c0:Comp> <c1:Boxed<Atom>> <c2:(Comp Boxed<Atom>)?> => Comparison(c,c0,c1,c2);
+FullComp: Comparison = <c:Boxed<AtomInner>> <c0:Comp> <c1:Boxed<AtomInner>> <c2:(Comp Boxed<AtomInner>)?> => Comparison(c,c0,c1,c2);
 
 Comp: ComparisonOp = {
     <s:"=="> => ComparisonOp::from_str(s).unwrap(),
@@ -177,19 +172,19 @@ Call: Expr = {
 }
 
 Point: Expr = {
-    "(" <a:Boxed<Atom>> "," <b:Boxed<Atom>> ")" => Expr::Point(a, b),
-    "(" <a:Boxed<Atom>> "," <b:Boxed<Atom>> "," <c:Boxed<Atom>> ")" => Expr::Point3(a, b, c),
+    "(" <a:Boxed<AtomInner>> "," <b:Boxed<AtomInner>> ")" => Expr::Point(a, b),
+    "(" <a:Boxed<AtomInner>> "," <b:Boxed<AtomInner>> "," <c:Boxed<AtomInner>> ")" => Expr::Point3(a, b, c),
 }
 
 List: Expr = {
     "[" <l:ListIn> "]" => Expr::List(l),
     "[" "]" => Expr::List(vec![]),
-    "[" <a:Boxed<Atom>> "~" <b:Boxed<Atom>> "]" => Expr::ListR(a,b)
+    "[" <a:Boxed<AtomInner>> "~" <b:Boxed<AtomInner>> "]" => Expr::ListR(a,b)
 };
 
 ListIn: Vec<Expr> = {
-    <mut l:ListIn> "," <a:Atom> => {l.push(a); l},
-    <a:Atom> => vec![a],
+    <mut l:ListIn> "," <a:AtomInner> => {l.push(a); l},
+    <a:AtomInner> => vec![a],
 };
 
 VarList: Vec<(String, ExprType)> = {
