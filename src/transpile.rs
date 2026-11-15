@@ -67,7 +67,7 @@ pub fn transpile_many(
                     // `DesmoExprs` to the list.
                     fields.iter_mut().for_each(|field| {
                         *field = (
-                            ccase!(camel, format!("{}_{}", dbg!(&n_og), dbg!(&field.0))),
+                            ccase!(camel, format!("{}_{}", &n_og, &field.0)),
                             field.1.clone(),
                         )
                     });
@@ -323,7 +323,7 @@ fn tr(
             // Special casing for dt (ticker delta time)
             if s != "dt" {
                 let replaced = s.replace('_', "");
-                let replaced = if let Some((fn_name, params, rename_only)) = dbg!(fn_name)
+                let replaced = if let Some((fn_name, params, rename_only)) = fn_name
                     && rename_only.clone().is_none_or(|x| x.contains_key(s))
                     && !params.iter().find(|(n, _)| n == s).is_some()
                 {
