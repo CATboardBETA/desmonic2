@@ -666,14 +666,23 @@ pub fn check(
             let mut on_ty = check(*on, vars, funcs, errs);
             let mut ret_ty: Option<ExprType> = None;
             for case in cases {
-                if let  SwitchCase::Default{..} = case {
-                    continue;
+                if let  SwitchCase::Default{ then } = case {
+                    let Statement::Expr(then) = then.last().unwrap() else { unreachable!() };
+                    let case_ret_ty = check(then.clone(), vars, funcs, errs);
+                    ret_ty = if ret_ty.is_none_or(|x| x == case_ret_ty) {
+                        Some(case_ret_ty)
+                    } else {
+                        errs.push("Case must return the same type on all branches".to_string());
+                        Some(ExprType::Conflict)
+
+                    };
                 } else {
                     let SwitchCase::Case { is, then } = case else { unreachable!() };
                     let case_on_ty = check(is, vars, funcs, errs);
                     on_ty = if on_ty == case_on_ty {
                         on_ty
                     } else {
+                        errs.push(format!("Case type {case_on_ty:?} does not match expected type of {on_ty:?}"));
                         ExprType::Conflict
                     };
                     let Statement::Expr(then) = then.last().unwrap() else { unreachable!() };
@@ -682,11 +691,12 @@ pub fn check(
                     ret_ty = if ret_ty.is_none_or(|x| x == case_ret_ty) {
                         Some(case_ret_ty)
                     } else {
+                        errs.push("Case must return the same type on all branches".to_string());
                         Some(ExprType::Conflict)
                     }
                 }
             }
-            on_ty
+            ret_ty.unwrap_or(ExprType::Conflict)
         }
     }
 }
