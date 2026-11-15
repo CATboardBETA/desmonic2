@@ -677,7 +677,7 @@ fn tr(
             let cases = cases.iter().map(gen_cmp).collect::<Vec<_>>().join(",");
             SWITCH_ID.fetch_add(1, Ordering::Relaxed);
 
-            format!("\\left{{{cases}\\right}}")
+            format!("\\left\\{{{cases}\\right\\}}")
         }
     }
 }
