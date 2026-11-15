@@ -232,7 +232,7 @@ pub fn transpile_many(
             Statement::Note(s) => exprs.push(DesmoExpr {
                 id,
                 folder_id: fold_id,
-                content: format!("\\text {}", s.replace("\n", "\\n")),
+                content: format!("\\text {}", unescaper::unescape_lossy(&s)),
                 other: hm(),
             }),
         }
