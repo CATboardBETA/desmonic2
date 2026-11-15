@@ -294,10 +294,11 @@ fn tr(
             tr(e, fn_name, exprs, ids)
         ),
         Expr::Var(s) => {
+            // Special casing for dt (ticker delta time)
             if s != "dt" {
                 let replaced = s.replace('_', "");
                 let replaced = if let Some((fn_name, params, rename_only)) = fn_name
-                    && !rename_only.clone().is_some_and(|x| x.contains_key(s))
+                    && rename_only.clone().is_some_and(|x| x.contains_key(s))
                     && !params.iter().find(|(n, _)| n == s).is_some()
                 {
                     format!("{fn_name}{replaced}")
@@ -493,7 +494,7 @@ fn tr(
                 // point
                 let replaced = x.replace("_", "");
                 let replaced = if let Some((fn_name, params, rename_only)) = fn_name
-                    && !rename_only.clone().is_some_and(|x1| x1.contains_key(x))
+                    && rename_only.clone().is_some_and(|x1| x1.contains_key(x))
                     && !params.iter().find(|(n, _)| n == x).is_some()
                 {
                     format!("{fn_name}{replaced}")
