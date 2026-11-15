@@ -28,7 +28,12 @@ Stmt: Statement = {
     "note" <s:Str> ";" => Statement::Note(s),
     <Styled>,
     <Struct>,
+    <Folder>,
 }
+
+Folder: Statement = {
+ "folder" <n:Str> "{" <ss:Stmt*> "}" => Statement::Folder(n, ss)
+};
 
 
 ActionIn: Vec<(String, Expr)> = {
@@ -37,7 +42,7 @@ ActionIn: Vec<(String, Expr)> = {
 };
 
 Styled: Statement = {
-    "style" "{" <s:Stmt*> "}" "as" <l:StyleList> => Statement::Styled { stmts: s, style: l }
+    "style" "{" <ss:Stmt*> "}" "as" <l:StyleList> => Statement::Styled { stmts: ss, style: l }
 };
 
 StyleList: HashMap<Vec<String>, String> = {

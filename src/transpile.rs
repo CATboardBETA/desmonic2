@@ -235,6 +235,21 @@ pub fn transpile_many(
                 content: format!("\\text {}", unescaper::unescape_lossy(&s)),
                 other: hm(),
             }),
+            Statement::Folder(name, stmts) => {
+                let f_id = id;
+                let mut other = hm();
+                other.insert("collapsed".to_string(), Value::Bool(true));
+                exprs.push(DesmoExpr {
+                    id: f_id,
+                    folder_id: None,
+                    content: format!("\\folder {name}"),
+                    other,
+                });
+                id += 1;
+                let mut other = hm();
+                other.insert("hidden".to_string(), Value::Bool(true));
+                exprs.extend(transpile_many(stmts, fn_name, id, Some(f_id)))
+            }
         }
     }
     exprs
@@ -547,14 +562,16 @@ fn tr(
                 ),
             };
             format!("{n}\\left[{l}\\right]")
-        },
+        }
         Expr::Switch { on, cases } => {
             let on = tr(on, fn_name, exprs, ids);
             let gen_cmp = |against: &SwitchCase| -> String {
                 match against {
                     SwitchCase::Case { is, then } => {
                         let case = tr(is, fn_name, exprs, ids);
-                        let Some((Statement::Expr(then_val), then_rest)) = then.split_last() else { unreachable!() };
+                        let Some((Statement::Expr(then_val), then_rest)) = then.split_last() else {
+                            unreachable!()
+                        };
                         let fn_name_pt3 = then_rest
                             .iter()
                             .map(|def| {
@@ -564,7 +581,12 @@ fn tr(
                                 (
                                     n.clone(),
                                     if let Some(fn_name) = fn_name {
-                                        format!("{}switch{}{}", fn_name.0, FOR_ID.load(Ordering::Relaxed), n)
+                                        format!(
+                                            "{}switch{}{}",
+                                            fn_name.0,
+                                            FOR_ID.load(Ordering::Relaxed),
+                                            n
+                                        )
                                     } else {
                                         format!("switch{}{}", FOR_ID.load(Ordering::Relaxed), n)
                                     },
@@ -599,7 +621,10 @@ fn tr(
                                 let content = format!("{}={}", n, tr(e, fn_name, exprs, ids));
                                 ids.0 += 1;
                                 let mut other = hm();
-                                other.insert("hidden".to_string(), Value::String("true".to_string()));
+                                other.insert(
+                                    "hidden".to_string(),
+                                    Value::String("true".to_string()),
+                                );
                                 DesmoExpr {
                                     id: ids.0,
                                     folder_id: ids.1,
@@ -611,10 +636,11 @@ fn tr(
                         exprs.append(&mut additional);
                         let then = tr(then_val, Some(fn_name2), exprs, ids);
                         format!("{on}={case}:{then}")
-
                     }
                     SwitchCase::Default { then } => {
-                        let Some((Statement::Expr(then_val), then_rest)) = then.split_last() else { unreachable!() };
+                        let Some((Statement::Expr(then_val), then_rest)) = then.split_last() else {
+                            unreachable!()
+                        };
 
                         let fn_name_pt3 = then_rest
                             .iter()
@@ -625,7 +651,12 @@ fn tr(
                                 (
                                     n.clone(),
                                     if let Some(fn_name) = fn_name {
-                                        format!("{}switch{}{}", fn_name.0, FOR_ID.load(Ordering::Relaxed), n)
+                                        format!(
+                                            "{}switch{}{}",
+                                            fn_name.0,
+                                            FOR_ID.load(Ordering::Relaxed),
+                                            n
+                                        )
                                     } else {
                                         format!("switch{}{}", FOR_ID.load(Ordering::Relaxed), n)
                                     },
@@ -660,7 +691,10 @@ fn tr(
                                 let content = format!("{}={}", n, tr(e, fn_name, exprs, ids));
                                 ids.0 += 1;
                                 let mut other = hm();
-                                other.insert("hidden".to_string(), Value::String("true".to_string()));
+                                other.insert(
+                                    "hidden".to_string(),
+                                    Value::String("true".to_string()),
+                                );
                                 DesmoExpr {
                                     id: ids.0,
                                     folder_id: ids.1,

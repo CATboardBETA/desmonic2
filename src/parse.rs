@@ -82,8 +82,8 @@ impl Display for ComparisonOp {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum SwitchCase {
-    Case {is: Expr, then: Vec<Statement>},
-    Default{then: Vec<Statement>}
+    Case { is: Expr, then: Vec<Statement> },
+    Default { then: Vec<Statement> },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -172,6 +172,7 @@ pub enum Statement {
     Struct(String, HashMap<String, ExprType>),
     Ticker(Vec<Expr>),
     Note(String),
+    Folder(String, Vec<Statement>),
 }
 
 fn bx<T>(x: T) -> Box<T> {

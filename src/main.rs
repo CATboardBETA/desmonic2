@@ -272,8 +272,11 @@ fn type_check(
                     type_check::check(act.clone(), vars, funcs, errs);
                 }
             }
-            parse::Statement::Note(_) => {
+            Statement::Note(_) => {
                 // Notes have nothing to check :-)
+            }
+            Statement::Folder(_, stmts) => {
+                type_check(stmts, vars, funcs, errs);
             }
         }
     }
