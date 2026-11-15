@@ -303,17 +303,20 @@ pub fn check(
             elsee,
         } => {
             let body = check(*body, vars, funcs, errs);
-            let mut extra_tys = vec![];
+            let mut tys = vec![];
             for elif in elifs {
                 let Elif { cmp: _, body } = elif;
-                extra_tys.push(check(*body, vars, funcs, errs));
+                tys.push(check(*body, vars, funcs, errs));
             }
             if let Some(elsee) = elsee {
-                extra_tys.push(check(*elsee, vars, funcs, errs));
+                tys.push(check(*elsee, vars, funcs, errs));
             }
-            if extra_tys.array_windows().all(|[a, b]| a == b)
-                && body == *extra_tys.first().unwrap_or(&body)
-            {
+            tys.push(body.clone());
+            if tys.array_windows().all(|[a, b]| {
+                a == b
+                    || (*a == ExprType::NumList && *b == ExprType::Num)
+                    || (*a == ExprType::Num && *b == ExprType::NumList)
+            }) {
                 body
             } else {
                 errs.push("All `if` bodies must have the same type".to_string());
@@ -587,16 +590,12 @@ pub fn check(
                     errs.push(format!("Struct missing fields `{diff}`"));
                     ExprType::Conflict
                 } else {
-                    let storage;
-                    let index;
-                    if found.len() == 1 {
+                    let (storage, index) = if found.len() == 1 {
                         // Fill this in `::transpile::tr`
-                        storage = StructStorage::OneVar("".to_string());
-                        index = HashMap::new();
+                        (StructStorage::OneVar("".to_string()), HashMap::new())
                     } else {
                         // Fill this in `::transpile::tr`
-                        storage = StructStorage::ManyVars(vec![]);
-                        index = HashMap::new();
+                        (StructStorage::ManyVars(vec![]), HashMap::new())
                     };
                     ExprType::Struct(StructTy {
                         name: Arc::new(Mutex::new(s_name)),
@@ -616,15 +615,19 @@ pub fn check(
             for act in acts {
                 if let Some(var_ty) = vars.get(&act.0).cloned() {
                     let typed = check(act.1.clone(), vars, funcs, errs);
-                    if typed != var_ty {
-                        errs.push(format!(
-                            "Action on `{}` expected ty `{:?}`, got ty `{:?}`",
-                            act.0, var_ty, typed
-                        ));
-                        it = ExprType::Conflict;
-                    }
-                    if typed == ExprType::Action {
-                        errs.push("Cannot act on an action".to_string())
+                    if !(typed == ExprType::Num && var_ty == ExprType::NumList)
+                        && !(typed == ExprType::NumList && var_ty == ExprType::Num)
+                    {
+                        if typed != var_ty {
+                            errs.push(format!(
+                                "Action on `{}` expected ty `{:?}`, got ty `{:?}`",
+                                act.0, var_ty, typed
+                            ));
+                            it = ExprType::Conflict;
+                        }
+                        if typed == ExprType::Action {
+                            errs.push("Cannot act on an action".to_string())
+                        }
                     }
                 } else {
                     errs.push(format!("Cannot act on nonexistent variable `{}`", act.0))
