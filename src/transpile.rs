@@ -92,16 +92,21 @@ pub fn transpile_many(
                 let Some((last, body)) = body.split_last() else {
                     unreachable!()
                 };
-                let f_id = id;
-                let mut other = hm();
-                other.insert("collapsed".to_string(), Value::Bool(true));
-                exprs.push(DesmoExpr {
-                    id: f_id,
-                    folder_id: None,
-                    content: format!("\\folder Function `{name}`"),
-                    other,
-                });
-                id += 1;
+                let f_id = if let Some(fold_id) = fold_id {
+                    fold_id
+                } else {
+                    let f_id = id;
+                    let mut other = hm();
+                    other.insert("collapsed".to_string(), Value::Bool(true));
+                    exprs.push(DesmoExpr {
+                        id: f_id,
+                        folder_id: None,
+                        content: format!("\\folder Function `{name}`"),
+                        other,
+                    });
+                    id += 1;
+                    f_id
+                };
                 let mut other = hm();
                 other.insert("hidden".to_string(), Value::Bool(true));
 
