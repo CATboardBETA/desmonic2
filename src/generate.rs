@@ -25,8 +25,10 @@ impl GraphState {
                         other: e.other,
                     })
                 } else if let Some(latex) = e.content.strip_prefix("\\ticker ") {
+                    let (ms, latex) = latex.split_once(' ').unwrap();
                     ticker = Some(Ticker {
                         handler_latex: latex.to_string(),
+                        min_step_latex: ms.to_string(),
                         open: true,
                         playing: false,
                     });
@@ -84,6 +86,7 @@ struct Expressions {
 #[serde(rename_all = "camelCase")]
 struct Ticker {
     handler_latex: String,
+    min_step_latex: String,
     open: bool,
     playing: bool,
 }

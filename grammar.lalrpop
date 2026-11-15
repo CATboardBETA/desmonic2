@@ -10,7 +10,7 @@ grammar;
 pub Program = <Stmt*> <Ticker?>;
 
 Ticker: Statement = {
-    "tick" "{" <a:TickerIn> "}" => Statement::Ticker(a),
+    "tick" "{" <a:TickerIn> "}" "every" <ms:AtomInner> => Statement::Ticker(a,ms),
 }
 
 TickerIn: Vec<Expr> = {

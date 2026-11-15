@@ -45,7 +45,7 @@ pub fn transpile_many(
             Statement::Def(n_og, mut e) => {
                 let n = {
                     let replaced = n_og.replace('_', "");
-                    let replaced = if let Some((fn_name, params, rename_only)) = fn_name
+                    let replaced = if let Some((fn_name, _params, rename_only)) = fn_name
                         && !rename_only
                             .clone()
                             .is_some_and(|x| x.contains_key(&replaced))
@@ -219,9 +219,10 @@ pub fn transpile_many(
                 // Struct definitions don't transpile into anything. They are only used by the
                 // Desmonic type checker.
             }
-            Statement::Ticker(acts) => {
+            Statement::Ticker(acts, ms) => {
                 let content = format!(
-                    "\\ticker {}",
+                    "\\ticker {} {}",
+                    tr(&ms, fn_name, &mut exprs, &mut (id, fold_id)),
                     acts.iter()
                         .map(|x| tr(x, fn_name, &mut exprs, &mut (id, fold_id)))
                         .collect::<Vec<_>>()

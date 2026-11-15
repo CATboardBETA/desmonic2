@@ -267,9 +267,13 @@ fn type_check(
                 // Structs *definitions* don't require any special type checking, it is all handled
                 // in the grammar file.
             }
-            Statement::Ticker(acts) => {
+            Statement::Ticker(acts, ms) => {
                 for act in acts {
                     type_check::check(act.clone(), vars, funcs, errs);
+                }
+                let ms_ty = type_check::check(ms.clone(), vars, funcs, errs);
+                if ms_ty != ExprType::Num {
+                    errs.push(format!("Ticker interval must be of type `Num`, got `{ms_ty:?}`"))
                 }
             }
             Statement::Note(_) => {

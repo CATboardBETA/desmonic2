@@ -170,7 +170,7 @@ pub enum Statement {
     },
     Implicit(Expr, ComparisonOp, Expr),
     Struct(String, HashMap<String, ExprType>),
-    Ticker(Vec<Expr>),
+    Ticker(Vec<Expr>, Expr),
     Note(String),
     Folder(String, Vec<Statement>),
 }
