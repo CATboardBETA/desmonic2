@@ -130,7 +130,7 @@ ForList: Vec<(String, Expr)> = {
 }
 
 If: Expr = {
-    "if" <cmp:FullComp> "{" <body:Boxed<AtomInner>> "}" <elifs:Elif*> <elsee:Else?>  =>
+    "if" <cmp:FullComp> "{" <body:Boxed<Atom>> "}" <elifs:Elif*> <elsee:Else?>  =>
          Expr::If {cmp, body, elifs, elsee}
 }
 
@@ -143,8 +143,8 @@ Case: SwitchCase = {
     "case" <is:AtomInner> "{" <then:FnBody>"}" => SwitchCase::Case { is, then }
 }
 
-Else: Box<Expr> = "else" "{" <Boxed<AtomInner>> "}";
-Elif: Elif = "elif" <cmp:FullComp> "{" <body:Boxed<AtomInner>> "}" => Elif {cmp, body};
+Else: Box<Expr> = "else" "{" <Boxed<Atom>> "}";
+Elif: Elif = "elif" <cmp:FullComp> "{" <body:Boxed<Atom>> "}" => Elif {cmp, body};
 
 FullComp: Comparison = <c:Boxed<AtomInner>> <c0:Comp> <c1:Boxed<AtomInner>> <c2:(Comp Boxed<AtomInner>)?> => Comparison(c,c0,c1,c2);
 
