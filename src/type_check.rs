@@ -498,7 +498,7 @@ pub fn check(
                     unreachable!()
                 };
                 let typed = check(e.clone(), &mut vars2, funcs, errs);
-                vars.insert(n.clone(), typed);
+                vars2.insert(n.clone(), typed);
             }
             let Statement::Expr(last) = last[0].clone() else {
                 unreachable!()
