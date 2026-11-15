@@ -46,9 +46,9 @@ pub fn transpile_many(
                 let n = {
                     let replaced = n_og.replace('_', "");
                     let replaced = if let Some((fn_name, _params, rename_only)) = fn_name
-                        && !rename_only
+                        && rename_only
                             .clone()
-                            .is_some_and(|x| x.contains_key(&replaced))
+                            .is_none_or(|x| x.contains_key(&replaced))
                     {
                         format!("{fn_name}{replaced}")
                     } else {
@@ -109,9 +109,34 @@ pub fn transpile_many(
                 };
                 let mut other = hm();
                 other.insert("hidden".to_string(), Value::Bool(true));
-
+                let fn_name2 = Some((
+                    name,
+                    params,
+                    &Some(
+                        body.iter()
+                            .map(|def| {
+                                let Statement::Def(n, _) = def else {
+                                    unreachable!()
+                                };
+                                (
+                                    n.clone(),
+                                    if let Some(fn_name) = fn_name {
+                                        format!(
+                                            "{}for{}{}",
+                                            fn_name.0,
+                                            FOR_ID.load(Ordering::Relaxed),
+                                            n
+                                        )
+                                    } else {
+                                        format!("for{}{}", FOR_ID.load(Ordering::Relaxed), n)
+                                    },
+                                )
+                            })
+                            .collect(),
+                    ),
+                ));
                 exprs.append(
-                    &mut transpile_many(body.into(), Some((name, params, &None)), id, Some(f_id))
+                    &mut transpile_many(body.into(), fn_name2, id, Some(f_id))
                         .into_iter()
                         .map(|mut e| {
                             e.other = other.clone();
@@ -147,12 +172,7 @@ pub fn transpile_many(
                     };
                     format!("{first}{rest}")
                 };
-                let val = tr(
-                    e,
-                    Some((name, params, &None)),
-                    &mut exprs,
-                    &mut (id, fold_id),
-                );
+                let val = tr(e, fn_name2, &mut exprs, &mut (id, fold_id));
                 exprs.push(DesmoExpr {
                     id,
                     folder_id: Some(f_id),
@@ -303,8 +323,8 @@ fn tr(
             // Special casing for dt (ticker delta time)
             if s != "dt" {
                 let replaced = s.replace('_', "");
-                let replaced = if let Some((fn_name, params, rename_only)) = fn_name
-                    && rename_only.clone().is_some_and(|x| x.contains_key(s))
+                let replaced = if let Some((fn_name, params, rename_only)) = dbg!(fn_name)
+                    && rename_only.clone().is_none_or(|x| x.contains_key(s))
                     && !params.iter().find(|(n, _)| n == s).is_some()
                 {
                     format!("{fn_name}{replaced}")
@@ -500,7 +520,7 @@ fn tr(
                 // point
                 let replaced = x.replace("_", "");
                 let replaced = if let Some((fn_name, params, rename_only)) = fn_name
-                    && rename_only.clone().is_some_and(|x1| x1.contains_key(x))
+                    && rename_only.clone().is_none_or(|x1| x1.contains_key(x))
                     && !params.iter().find(|(n, _)| n == x).is_some()
                 {
                     format!("{fn_name}{replaced}")

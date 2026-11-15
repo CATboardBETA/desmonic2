@@ -273,7 +273,9 @@ fn type_check(
                 }
                 let ms_ty = type_check::check(ms.clone(), vars, funcs, errs);
                 if ms_ty != ExprType::Num {
-                    errs.push(format!("Ticker interval must be of type `Num`, got `{ms_ty:?}`"))
+                    errs.push(format!(
+                        "Ticker interval must be of type `Num`, got `{ms_ty:?}`"
+                    ))
                 }
             }
             Statement::Note(_) => {
