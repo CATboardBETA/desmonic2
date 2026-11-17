@@ -321,7 +321,7 @@ fn tr(
         ),
         Expr::Var(s) => {
             // Special casing for dt (ticker delta time)
-            if s != "dt" {
+            if s != "dt" && s != "width" && s != "height" {
                 let replaced = s.replace('_', "");
                 let replaced = if let Some((fn_name, params, rename_only)) = fn_name
                     && rename_only.clone().is_none_or(|x| x.contains_key(s))
@@ -340,7 +340,7 @@ fn tr(
 
                 format!("{first}{rest}")
             } else {
-                "\\operatorname{dt}".to_string()
+                format!("\\operatorname{{{s}}}")
             }
         }
         Expr::If {

@@ -66,6 +66,8 @@ fn main() {
         let file_str = fs::read_to_string(input).expect("Failed to read input file.");
         let (mut ast, tick_ast) = parse::gen_ast(&file_str).unwrap();
         let mut vars = HashMap::new();
+        vars.insert("width".to_owned(), ExprType::Num);
+        vars.insert("height".to_owned(), ExprType::Num);
         let mut funcs = type_check::BUILTIN_FUNCS
             .clone()
             .into_iter()
